@@ -112,32 +112,19 @@ class FeedChecker:
                 # First time processing
                 new_last_item_id = result["lastItemIdToSave"]
 
-                # Use the date of the most recent post in the feed as baseline, not current time
-                # This ensures we don't notify posts that existed before adding the feed,
-                # but we WILL notify posts created between adding the feed and first check
-                feed_data = await rss_service.fetch_feed(feed.rss_url or feed.url)
-                if feed_data.get("success") and feed_data.get("feed") and feed_data["feed"].items:
-                    # Get the most recent item's date as baseline
-                    most_recent_item = feed_data["feed"].items[
-                        0
-                    ]  # Items are already sorted by date descending
-                    if most_recent_item.pub_date:
-                        last_notified = most_recent_item.pub_date
-                        logger.debug(
-                            f"🔍 First time processing {feed.name} - setting baseline to most recent post date: "
-                            f"{last_notified.isoformat()} (from post {most_recent_item.id})"
-                        )
-                    else:
-                        # Fallback to current time if no date
-                        last_notified = datetime.utcnow()
-                        logger.debug(
-                            f"🔍 First time processing {feed.name} - post has no date, using current time as baseline: {last_notified.isoformat()}"
-                        )
+                # Use feed.created_at as baseline to ensure we notify posts created AFTER the feed was added
+                # This is critical: if a user adds a feed and then immediately posts, that post should be notified
+                if feed.created_at:
+                    last_notified = feed.created_at
+                    logger.debug(
+                        f"🔍 First time processing {feed.name} - setting baseline to feed creation time: "
+                        f"{last_notified.isoformat()} (feed created at this time)"
+                    )
                 else:
-                    # Fallback to current time if feed fetch fails
+                    # Fallback to current time if created_at is not set (shouldn't happen)
                     last_notified = datetime.utcnow()
                     logger.debug(
-                        f"🔍 First time processing {feed.name} - could not fetch feed, using current time as baseline: {last_notified.isoformat()}"
+                        f"🔍 First time processing {feed.name} - feed has no created_at, using current time as baseline: {last_notified.isoformat()}"
                     )
             elif new_items:
                 # Has new items - use the most recent new item (already sorted by date descending)
