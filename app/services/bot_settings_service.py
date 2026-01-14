@@ -107,7 +107,8 @@ class BotSettingsService:
 
                 session.commit()
                 session.refresh(setting)
-                logger.info(f"Updated setting {key} = {value} ({value_type})")
+                # Removed INFO log for setting updates (only log errors)
+                logger.debug(f"Updated setting {key} = {value} ({value_type})")
                 return setting
         except Exception as e:
             logger.error(f"Failed to set setting {key}: {e}")

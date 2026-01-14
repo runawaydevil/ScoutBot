@@ -330,8 +330,9 @@ class FeedChecker:
         return message
 
     async def check_all_feeds(self):
-        """Check all enabled feeds with smart logging"""
+        """Check all enabled feeds with smart logging and bounded concurrency"""
         try:
+            import asyncio
             logger.debug("🔍 Fetching enabled feeds from database...")
             feeds = await feed_service.get_all_enabled_feeds()
             
@@ -340,15 +341,6 @@ class FeedChecker:
             if not feeds:
                 logger.debug("ℹ️ No enabled feeds to check")
                 return
-            
-            # Log feed details for debugging
-            for feed in feeds:
-                logger.debug(
-                    f"📋 Feed: {feed.name} | "
-                    f"URL: {feed.url} | "
-                    f"Interval: {feed.check_interval_minutes} min | "
-                    f"Last check: {feed.last_check.isoformat() if feed.last_check else 'Never'}"
-                )
 
             # Track statistics
             stats = {
@@ -360,45 +352,57 @@ class FeedChecker:
                 "error_feeds": [],
             }
 
-            # Only log start if feeds will be checked
+            # Filter feeds that should be checked
             feeds_to_check = [f for f in feeds if self._should_check_feed(f)]
-            if feeds_to_check:
-                logger.debug(f"🔄 Checking {len(feeds_to_check)} feed(s)...")
+            
+            if not feeds_to_check:
+                logger.debug("ℹ️ No feeds need checking at this time")
+                return
 
-            # Process feeds sequentially to avoid rate limiting
-            for feed in feeds:
-                try:
-                    if not self._should_check_feed(feed):
-                        stats["skipped"] += 1
-                        logger.debug(f"⏭️ Skipping {feed.name} - interval not reached")
-                        continue
+            # Process feeds with bounded concurrency (max 5 concurrent) and timeout
+            semaphore = asyncio.Semaphore(5)  # Max 5 concurrent feed checks
+            
+            async def check_feed_with_semaphore(feed):
+                """Check a single feed with semaphore and timeout"""
+                async with semaphore:
+                    try:
+                        # Add timeout to feed check (30 seconds)
+                        result = await asyncio.wait_for(
+                            self.check_feed(feed),
+                            timeout=30.0
+                        )
+                        return feed, result
+                    except asyncio.TimeoutError:
+                        logger.error(f"❌ Timeout checking feed {feed.name} (30s)")
+                        return feed, {"success": False, "error": "Timeout after 30 seconds"}
+                    except Exception as e:
+                        logger.error(f"❌ Error checking feed {feed.name}: {e}")
+                        return feed, {"success": False, "error": str(e)}
 
-                    stats["checked"] += 1
-                    result = await self.check_feed(feed)
+            # Process feeds in batches with bounded concurrency
+            tasks = [check_feed_with_semaphore(feed) for feed in feeds_to_check]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    if not result.get("success"):
-                        stats["errors"] += 1
-                        stats["error_feeds"].append(feed.name)
-                        logger.error(f"❌ Failed to check {feed.name}: {result.get('error')}")
-                    else:
-                        notifications = result.get("notifications_sent", 0)
-                        stats["notifications"] += notifications
-
-                        if notifications > 0:
-                            logger.debug(f"✅ {feed.name}: {notifications} notification(s) sent")
-                        else:
-                            logger.debug(f"✓ {feed.name}: No new items")
-
-                    # Small delay between feeds to avoid overwhelming the system
-                    import asyncio
-
-                    await asyncio.sleep(1)
-
-                except Exception as e:
+            # Process results
+            for result in results:
+                if isinstance(result, Exception):
+                    stats["errors"] += 1
+                    logger.error(f"❌ Exception in feed check: {result}")
+                    continue
+                
+                feed, check_result = result
+                stats["checked"] += 1
+                
+                if not check_result.get("success"):
                     stats["errors"] += 1
                     stats["error_feeds"].append(feed.name)
-                    logger.error(f"❌ Error checking feed {feed.name}: {e}")
-                    continue
+                    logger.error(f"❌ Failed to check {feed.name}: {check_result.get('error')}")
+                else:
+                    notifications = check_result.get("notifications_sent", 0)
+                    stats["notifications"] += notifications
+                    # Only log if there are notifications (reduce verbosity)
+                    if notifications > 0:
+                        logger.debug(f"✅ {feed.name}: {notifications} notification(s) sent")
 
             # Log summary
             self._log_summary(stats)

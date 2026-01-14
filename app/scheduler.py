@@ -61,11 +61,11 @@ class SchedulerService:
                 jobstores = {
                     "default": SQLAlchemyJobStore(url=jobs_db_url, tablename="apscheduler_jobs")
                 }
-                logger.info(f"Scheduler using SQLiteJobStore for persistence: {jobs_db_url}")
+                logger.debug(f"Scheduler using SQLiteJobStore for persistence: {jobs_db_url}")
             else:
                 # Use MemoryJobStore (no persistence)
                 jobstores = {"default": MemoryJobStore()}
-                logger.info("Scheduler using MemoryJobStore (no persistence)")
+                logger.debug("Scheduler using MemoryJobStore (no persistence)")
             
             executors = {"default": AsyncIOExecutor()}
             job_defaults = {
@@ -81,7 +81,7 @@ class SchedulerService:
                 timezone="UTC"
             )
 
-            logger.info("Scheduler initialized successfully")
+            logger.debug("Scheduler initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize scheduler: {e}")
             raise
@@ -94,7 +94,7 @@ class SchedulerService:
         try:
             self.scheduler.start()
             self.running = True
-            logger.info("Scheduler started")
+            logger.debug("Scheduler started")
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
             raise
@@ -105,7 +105,7 @@ class SchedulerService:
             try:
                 self.scheduler.shutdown(wait=True)
                 self.running = False
-                logger.info("Scheduler stopped")
+                logger.debug("Scheduler stopped")
             except Exception as e:
                 logger.error(f"Failed to stop scheduler: {e}")
 
@@ -118,12 +118,13 @@ class SchedulerService:
             job = self.scheduler.add_job(
                 func, trigger=trigger, id=job_id, replace_existing=True, **kwargs
             )
+            # Removed INFO logs for job scheduling (only log errors)
             if job and job.next_run_time:
-                logger.info(
+                logger.debug(
                     f"Job added: {job_id or func.__name__} - Next run: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
                 )
             else:
-                logger.info(f"Job added: {job_id or func.__name__}")
+                logger.debug(f"Job added: {job_id or func.__name__}")
         except Exception as e:
             logger.error(f"Failed to add job: {e}")
             raise
@@ -147,7 +148,7 @@ class SchedulerService:
 
         try:
             self.scheduler.remove_job(job_id)
-            logger.info(f"Job removed: {job_id}")
+            logger.debug(f"Job removed: {job_id}")
         except Exception as e:
             logger.error(f"Failed to remove job: {job_id}: {e}")
 

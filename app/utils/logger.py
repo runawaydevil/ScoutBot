@@ -1,6 +1,7 @@
 """Structured logging setup using structlog"""
 
 import logging
+import os
 import sys
 from typing import Any, Optional
 
@@ -10,43 +11,70 @@ from app.config import settings
 
 
 def configure_third_party_loggers(log_level: int):
-    """Configure third-party library loggers to reduce verbosity"""
+    """Configure third-party library loggers to reduce verbosity - ERROR only in production"""
 
-    # Uvicorn access logs - suppress in production unless error
-    if settings.environment == "production" and log_level > logging.DEBUG:
-        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    else:
-        logging.getLogger("uvicorn.access").setLevel(log_level)
-
-    # Uvicorn error logs
-    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
-
-    # APScheduler - reduce verbosity
-    if log_level > logging.DEBUG:
-        logging.getLogger("apscheduler").setLevel(logging.WARNING)
-    else:
-        logging.getLogger("apscheduler").setLevel(log_level)
-
-    # Aiohttp - reduce verbosity
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    # Set all third-party loggers to ERROR minimum (suppress INFO, DEBUG, WARNING)
+    error_level = logging.ERROR
     
-    # Feedparser - reduce verbosity
-    logging.getLogger("feedparser").setLevel(logging.WARNING)
+    # Uvicorn - ERROR only
+    logging.getLogger("uvicorn.access").setLevel(error_level)
+    logging.getLogger("uvicorn.error").setLevel(error_level)
+
+    # APScheduler - ERROR only
+    logging.getLogger("apscheduler").setLevel(error_level)
+    logging.getLogger("apscheduler.executors").setLevel(error_level)
+    logging.getLogger("apscheduler.jobstores").setLevel(error_level)
+
+    # Aiohttp - ERROR only
+    logging.getLogger("aiohttp").setLevel(error_level)
+    logging.getLogger("aiohttp.client").setLevel(error_level)
+    logging.getLogger("aiohttp.server").setLevel(error_level)
+    logging.getLogger("aiohttp.web").setLevel(error_level)
     
-    # SQLAlchemy - reduce verbosity in production
-    if settings.environment == "production" and log_level > logging.DEBUG:
-        logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-        logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    # Feedparser - ERROR only
+    logging.getLogger("feedparser").setLevel(error_level)
     
-    # Redis - reduce verbosity
-    logging.getLogger("redis").setLevel(logging.WARNING)
+    # SQLAlchemy - ERROR only
+    logging.getLogger("sqlalchemy").setLevel(error_level)
+    logging.getLogger("sqlalchemy.engine").setLevel(error_level)
+    logging.getLogger("sqlalchemy.pool").setLevel(error_level)
+    logging.getLogger("sqlalchemy.dialects").setLevel(error_level)
+    
+    # Redis - ERROR only
+    logging.getLogger("redis").setLevel(error_level)
+    logging.getLogger("redis.client").setLevel(error_level)
+    
+    # Pytube - ERROR only (suppress "Unexpected renderer", "Processing query", etc.)
+    logging.getLogger("pytube").setLevel(error_level)
+    logging.getLogger("pytube.request").setLevel(error_level)
+    logging.getLogger("pytube.streams").setLevel(error_level)
+    
+    # spotDL - ERROR only (suppress download progress, search terms)
+    logging.getLogger("spotdl").setLevel(error_level)
+    logging.getLogger("app.utils.spotdl").setLevel(error_level)
+    
+    # yt-dlp - ERROR only
+    logging.getLogger("yt_dlp").setLevel(error_level)
+    
+    # HTTP libraries - ERROR only
+    logging.getLogger("urllib3").setLevel(error_level)
+    logging.getLogger("requests").setLevel(error_level)
+    logging.getLogger("httpcore").setLevel(error_level)
+    
+    # Other common libraries - ERROR only
+    logging.getLogger("asyncio").setLevel(error_level)
+    logging.getLogger("multipart").setLevel(error_level)
 
 
 def configure_logging():
-    """Configure structured logging with environment-aware settings"""
+    """Configure structured logging with environment-aware settings - ERROR only in production"""
 
-    # Determine log level
-    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    # Determine log level (default to ERROR in production)
+    if settings.environment == "production" and not os.getenv("LOG_LEVEL"):
+        # Force ERROR in production unless explicitly set
+        log_level = logging.ERROR
+    else:
+        log_level = getattr(logging, settings.log_level.upper(), logging.ERROR)
 
     # Configure root logger
     logging.basicConfig(

@@ -34,15 +34,15 @@ class BotService:
     async def initialize(self):
         """Initialize bot"""
         try:
-            logger.info("🔧 Initializing bot service...")
+            logger.debug("🔧 Initializing bot service...")
 
             # Create bot instance with optional local Bot API Server
             if settings.telegram_use_local_api and settings.telegram_bot_api_server_url:
-                logger.info(f"🌐 Using local Telegram Bot API Server: {settings.telegram_bot_api_server_url}")
+                logger.debug(f"🌐 Using local Telegram Bot API Server: {settings.telegram_bot_api_server_url}")
                 custom_server = TelegramAPIServer.from_base(settings.telegram_bot_api_server_url)
                 session = AiohttpSession(api=custom_server)
             else:
-                logger.info("☁️ Using default Telegram Bot API (cloud)")
+                logger.debug("☁️ Using default Telegram Bot API (cloud)")
                 session = AiohttpSession()
             
             self.bot = Bot(
@@ -455,7 +455,7 @@ ScoutBot v0.4 by runawaydevil
             raise RuntimeError("Bot not initialized. Call initialize() first.")
         
         try:
-            logger.info(f"🔧 Setting up webhook: {webhook_url}")
+            logger.debug(f"🔧 Setting up webhook: {webhook_url}")
             
             # Set webhook
             await self.bot.set_webhook(
@@ -482,7 +482,7 @@ ScoutBot v0.4 by runawaydevil
             return False
         
         try:
-            logger.info("🔧 Removing webhook...")
+            logger.debug("🔧 Removing webhook...")
             await self.bot.delete_webhook(drop_pending_updates=True)
             logger.debug("✅ Webhook removed")
             return True
@@ -527,7 +527,7 @@ ScoutBot v0.4 by runawaydevil
             return
 
         try:
-            logger.info("🛑 Stopping bot polling...")
+            logger.debug("🛑 Stopping bot polling...")
             if self._polling_task:
                 self._polling_task.cancel()
                 try:

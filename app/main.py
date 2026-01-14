@@ -1,6 +1,8 @@
 """FastAPI application with health check endpoints"""
 
 import time
+import gc
+import asyncio
 from typing import Dict, Any, Optional
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -13,6 +15,12 @@ from app.bot import bot_service
 from app.scheduler import scheduler
 
 logger = get_logger(__name__)
+
+# Configure garbage collection for async workloads (optimize thresholds)
+# Reduce collection frequency for better performance with async I/O
+# Thresholds: (generation0, generation1, generation2)
+# Higher values = less frequent GC = better for async I/O workloads
+gc.set_threshold(700, 10, 10)  # Default is (700, 10, 10), optimized for async
 
 # Global application instance
 app = FastAPI(
@@ -30,7 +38,7 @@ async def startup_event():
     """Initialize services on startup"""
     global _app_start_time
     _app_start_time = time.time()
-    logger.info("Starting ScoutBot v0.03 application")
+    logger.debug("Starting ScoutBot v0.03 application")
 
     # Initialize database
     database.initialize()
@@ -118,7 +126,7 @@ async def startup_event():
         webhook_secret = settings.webhook_secret
         
         if webhook_url:
-            logger.info(f"🔧 Setting up webhook mode: {webhook_url}")
+            logger.debug(f"🔧 Setting up webhook mode: {webhook_url}")
             success = await bot_service.setup_webhook(webhook_url, webhook_secret)
             if not success:
                 logger.warning("⚠️ Webhook setup failed, falling back to polling")
@@ -149,7 +157,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    logger.info("Shutting down ScoutBot application")
+    logger.debug("Shutting down ScoutBot application")
 
     # Stop keep-alive service
     from app.resilience.keep_alive import keep_alive_service

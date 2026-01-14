@@ -1,6 +1,7 @@
 """Base downloader class adapted for aiogram"""
 
 import asyncio
+import gc
 import hashlib
 import json
 import re
@@ -165,8 +166,12 @@ class BaseDownloader(ABC):
         pass
 
     def _check_file_size(self, file_path: Path) -> tuple[bool, str]:
-        """Check if file size is within Telegram limits"""
+        """Check if file size is within Telegram limits and optimization limits"""
         file_size = file_path.stat().st_size
+        # Limit download size to 500MB for resource optimization
+        max_download_size = 500 * 1024 * 1024  # 500MB
+        if file_size > max_download_size:
+            return False, f"File size {sizeof_fmt(file_size)} exceeds limit ({sizeof_fmt(max_download_size)}). File too large."
         if self._format == "video" and file_size > TELEGRAM_VIDEO_MAX_SIZE:
             return False, f"File size {sizeof_fmt(file_size)} exceeds Telegram video limit (50MB). Trying as document..."
         return True, ""
@@ -436,6 +441,9 @@ class BaseDownloader(ABC):
                 await self.edit_text("✅ Success")
                 logger.debug(f"Successfully uploaded {self._url}")
                 
+                # Trigger garbage collection after large operations
+                gc.collect()
+                
                 # Record download statistic
                 try:
                     from app.services.statistics_service import statistics_service
@@ -543,8 +551,13 @@ class BaseDownloader(ABC):
             except Exception as e:
                 logger.warning(f"Failed to use cache: {e}, downloading fresh")
 
-        # No cache, download fresh
-        await self._start()
+        # No cache, download fresh with timeout (5 minutes)
+        try:
+            await asyncio.wait_for(self._start(), timeout=300.0)  # 5 minutes timeout
+        except asyncio.TimeoutError:
+            logger.error(f"Download timeout for {self._url} (5 minutes)")
+            await self.edit_text("❌ Download timeout (5 minutes). File may be too large or connection too slow.")
+            raise ValueError("Download timeout after 5 minutes")
 
     @abstractmethod
     async def _start(self):

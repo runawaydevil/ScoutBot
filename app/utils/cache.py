@@ -21,7 +21,7 @@ class CacheService:
     async def initialize(self):
         """Initialize Redis connection"""
         if self.disabled:
-            logger.info("Redis disabled, cache service not initialized")
+            logger.debug("Redis disabled, cache service not initialized")
             return
 
         pool = None
@@ -42,7 +42,7 @@ class CacheService:
 
             # Test connection
             await self.redis.ping()
-            logger.info("Redis cache service initialized successfully")
+            logger.debug("Redis cache service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Redis cache: {e}")
             self.disabled = True
@@ -65,12 +65,17 @@ class CacheService:
             return None
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None):
-        """Set value in cache"""
+        """Set value in cache with memory limits"""
         if self.disabled or not self.redis:
             return
 
         try:
             serialized = json.dumps(value)
+            # Check size limit (100MB for feed cache)
+            if len(serialized) > 100 * 1024 * 1024:  # 100MB
+                logger.warning(f"Cache value too large ({len(serialized)} bytes), skipping cache for key: {key}")
+                return
+            
             if ttl:
                 await self.redis.setex(key, ttl, serialized)
             else:
@@ -145,7 +150,7 @@ class CacheService:
             # Close connection pool if available
             if hasattr(self.redis, "connection_pool") and self.redis.connection_pool:
                 await self.redis.connection_pool.aclose()
-            logger.info("Redis cache service closed")
+            logger.debug("Redis cache service closed")
 
 
 # Global cache instance

@@ -8,11 +8,11 @@ from typing import Dict, Tuple
 class SessionManager:
     """Manages HTTP sessions per domain with rotation"""
 
-    def __init__(self, session_ttl: int = 1800):
+    def __init__(self, session_ttl: int = 900):
         self.sessions: Dict[str, Tuple[aiohttp.ClientSession, float]] = (
             {}
         )  # domain -> (session, created_at)
-        self.session_ttl = session_ttl  # 30 minutes (optimized from 1 hour)
+        self.session_ttl = session_ttl  # 15 minutes (optimized for memory)
 
     async def get_session(self, domain: str) -> aiohttp.ClientSession:
         """Get or create session for domain"""
@@ -35,9 +35,9 @@ class SessionManager:
                 # Session expired, close and create new
                 await session.close()
 
-        # Create new session with optimized connection limits
+        # Create new session with optimized connection limits (reduced for memory)
         session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit_per_host=3, limit=20),  # Reduced from 5 to 3 per host
+            connector=aiohttp.TCPConnector(limit_per_host=2, limit=15),  # Reduced to 2 per host, 15 total
             cookie_jar=aiohttp.CookieJar(),
         )
         self.sessions[domain] = (session, time.time())
@@ -57,5 +57,5 @@ class SessionManager:
             del self.sessions[domain]
 
 
-# Global instance with optimized TTL (30 minutes instead of 1 hour)
-session_manager = SessionManager(session_ttl=1800)
+# Global instance with optimized TTL (15 minutes for memory optimization)
+session_manager = SessionManager(session_ttl=900)

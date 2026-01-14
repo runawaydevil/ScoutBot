@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Application Configuration
     environment: str = Field(default="production", validation_alias="ENVIRONMENT")
-    log_level: str = Field(default="info", description="Log level: debug, info, warning, error")
+    log_level: str = Field(default="error", description="Log level: debug, info, warning, error (default: error for production)")
 
     @model_validator(mode="before")
     @classmethod
@@ -86,13 +86,17 @@ class Settings(BaseSettings):
     def set_environment_defaults(self) -> "Settings":
         """Set environment-specific defaults for log level"""
         if self.environment == "production":
-            # Production defaults
-            if self.log_level == "debug":
-                # Keep debug if explicitly set
-                pass
+            # Production defaults - ERROR only unless explicitly set
+            if self.log_level == "debug" or self.log_level == "info":
+                # Keep debug/info if explicitly set via env var
+                if os.getenv("LOG_LEVEL"):
+                    pass  # User explicitly set it
+                else:
+                    # Default to error in production
+                    self.log_level = "error"
             elif not os.getenv("LOG_LEVEL"):
-                # Default to info in production if not explicitly set
-                self.log_level = "info"
+                # Default to error in production if not explicitly set
+                self.log_level = "error"
 
         return self
 

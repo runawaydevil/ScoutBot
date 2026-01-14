@@ -116,7 +116,7 @@ class SpotifyDownload(BaseDownloader):
 
             # Parse URL to determine type
             url_type = self._parse_spotify_url_type(self._url)
-            logger.info(f"Detected Spotify URL type: {url_type} for {self._url}")
+            logger.debug(f"Detected Spotify URL type: {url_type} for {self._url}")
 
             # Determine if this is a batch download (playlist, album, or artist)
             self._is_batch = url_type in ("playlist", "album", "artist")
@@ -135,7 +135,7 @@ class SpotifyDownload(BaseDownloader):
             # For individual tracks, only download the first result
             if not self._is_batch and url_type == "track":
                 if len(songs) > 1:
-                    logger.info(
+                    logger.debug(
                         f"Track URL detected: found {len(songs)} results, using only the first one"
                     )
                     songs = [songs[0]]

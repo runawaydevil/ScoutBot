@@ -30,7 +30,7 @@ class BotStateService:
                     session.add(state)
                     session.commit()
                     session.refresh(state)
-                    logger.info("Created default bot state (running)")
+                    logger.debug("Created default bot state (running)")
 
                 return state
         except Exception as e:
@@ -66,7 +66,7 @@ class BotStateService:
                 state.updated_at = datetime.utcnow()
                 session.add(state)
                 session.commit()
-                logger.info(f"Bot stopped by user {user_id}: {reason}")
+                logger.debug(f"Bot stopped by user {user_id}: {reason}")
         except Exception as e:
             logger.error(f"Failed to stop bot: {e}")
             raise
@@ -94,7 +94,7 @@ class BotStateService:
                 state.updated_at = datetime.utcnow()
                 session.add(state)
                 session.commit()
-                logger.info("Bot started - all operations resumed")
+                logger.debug("Bot started - all operations resumed")
         except Exception as e:
             logger.error(f"Failed to start bot: {e}")
             raise

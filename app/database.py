@@ -32,7 +32,7 @@ class DatabaseService:
         try:
             # Convert SQLite URL format
             database_url = settings.database_url
-            logger.info(f"Raw database URL from settings: {database_url}")
+            logger.debug(f"Raw database URL from settings: {database_url}")
 
             # Handle different URL formats
             if database_url.startswith("file:"):
@@ -55,7 +55,7 @@ class DatabaseService:
                 db_dir = os.path.dirname(path)
                 if db_dir and not os.path.exists(db_dir):
                     os.makedirs(db_dir, exist_ok=True)
-                    logger.info(f"Created database directory: {db_dir}")
+                    logger.debug(f"Created database directory: {db_dir}")
 
                 # Convert to SQLAlchemy format (always use forward slashes for SQLite URLs)
                 normalized_path = path.replace("\\", "/")
@@ -70,7 +70,7 @@ class DatabaseService:
                 db_dir = os.path.dirname(path)
                 if db_dir and not os.path.exists(db_dir):
                     os.makedirs(db_dir, exist_ok=True)
-                    logger.info(f"Created database directory: {db_dir}")
+                    logger.debug(f"Created database directory: {db_dir}")
                 # Normalize for SQLite URL
                 normalized_path = path.replace("\\", "/")
                 database_url = f"sqlite:///{normalized_path}"
@@ -94,13 +94,13 @@ class DatabaseService:
                 db_dir = os.path.dirname(path)
                 if db_dir and not os.path.exists(db_dir):
                     os.makedirs(db_dir, exist_ok=True)
-                    logger.info(f"Created database directory: {db_dir}")
+                    logger.debug(f"Created database directory: {db_dir}")
 
                 # Normalize for SQLite URL
                 normalized_path = path.replace("\\", "/")
                 database_url = f"sqlite:///{normalized_path}"
 
-            logger.info(f"Connecting to database: {database_url.split('/')[-1]}")
+            logger.debug(f"Connecting to database: {database_url.split('/')[-1]}")
 
             # Create engine with SQLite-specific settings and connection pooling
             if database_url.startswith("sqlite:///"):
@@ -113,6 +113,22 @@ class DatabaseService:
                     pool_pre_ping=True,  # Verify connections before using
                     pool_recycle=3600,  # Recycle connections after 1 hour
                 )
+                
+                # Configure SQLite PRAGMA settings for optimal performance
+                with self.engine.connect() as conn:
+                    # Enable WAL mode for better concurrency
+                    conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+                    # Set synchronous to NORMAL (faster than FULL, safe with WAL)
+                    conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
+                    # Set cache size to 64MB (negative value = KB, so -64000 = 64MB)
+                    conn.exec_driver_sql("PRAGMA cache_size=-64000")
+                    # Use memory for temporary tables
+                    conn.exec_driver_sql("PRAGMA temp_store=MEMORY")
+                    # Enable memory-mapped I/O (256MB)
+                    conn.exec_driver_sql("PRAGMA mmap_size=268435456")
+                    # Optimize for performance
+                    conn.exec_driver_sql("PRAGMA optimize")
+                    conn.commit()
             else:
                 # For other databases (PostgreSQL, MySQL, etc.), use connection pooling
                 self.engine = create_engine(
@@ -127,7 +143,16 @@ class DatabaseService:
             # Create tables
             SQLModel.metadata.create_all(self.engine)
 
-            logger.debug("Database initialized successfully")
+            # Apply PRAGMA settings after table creation
+            with self.engine.connect() as conn:
+                conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+                conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
+                conn.exec_driver_sql("PRAGMA cache_size=-64000")
+                conn.exec_driver_sql("PRAGMA temp_store=MEMORY")
+                conn.exec_driver_sql("PRAGMA mmap_size=268435456")
+                conn.commit()
+
+            logger.debug("Database initialized successfully with WAL mode and optimizations")
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
@@ -185,11 +210,28 @@ class DatabaseService:
             logger.error(f"Failed to get database stats: {e}")
             return {"database": {}}
 
+    async def vacuum_and_analyze(self):
+        """Run VACUUM and ANALYZE to optimize database"""
+        if not self.engine:
+            return
+        
+        try:
+            from sqlalchemy import text
+            with self.engine.connect() as conn:
+                # VACUUM reclaims unused space
+                conn.execute(text("VACUUM"))
+                # ANALYZE updates query optimizer statistics
+                conn.execute(text("ANALYZE"))
+                conn.commit()
+                logger.debug("Database VACUUM and ANALYZE completed")
+        except Exception as e:
+            logger.error(f"Failed to run VACUUM/ANALYZE: {e}")
+
     def close(self):
         """Close database connection"""
         if self.engine:
             self.engine.dispose()
-            logger.info("Database connection closed")
+            logger.debug("Database connection closed")
 
 
 # Global database instance

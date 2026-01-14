@@ -51,15 +51,15 @@ services:
     user: "101:101"  # Align with telegram-bot-api UID/GID for file access
     ports:
       - "8916:8916"
-    # Memory and resource limits to prevent crashes
+    # Memory and resource limits optimized for lower consumption
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '1.0'
+          memory: 2G  # Reduced from 4G (optimized)
+          cpus: '0.75'  # Reduced from 1.0 (optimized)
         reservations:
-          memory: 1G
-          cpus: '0.5'
+          memory: 512M  # Reduced from 1G (optimized)
+          cpus: '0.25'  # Reduced from 0.5 (optimized)
     environment:
       - NODE_ENV=production
       - BOT_TOKEN=${BOT_TOKEN}
@@ -176,10 +176,10 @@ services:
       telegram-bot-api:
         condition: service_healthy
     restart: always
-    # Enhanced health check with more tolerant settings
+    # Enhanced health check with optimized intervals
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8916/health"]
-      interval: 30s
+      interval: 60s  # Increased from 30s (optimized)
       timeout: 10s
       retries: 10
       start_period: 60s

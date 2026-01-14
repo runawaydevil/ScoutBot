@@ -198,11 +198,11 @@ class RSSService:
         # Check if this is a YouTube URL - if so, use YouTube service
         youtube_service = get_youtube_service()
         if youtube_service.is_youtube_url(url):
-            logger.info(f"🔄 Detected YouTube URL (not RSS): {url}, using YouTube service")
+            logger.debug(f"🔄 Detected YouTube URL (not RSS): {url}, using YouTube service")
             result = await youtube_service.fetch_feed(url)
 
             if result.get("success") and result.get("feed"):
-                logger.info(f"✅ YouTube service provided feed for {url}")
+                logger.debug(f"✅ YouTube service provided feed for {url}")
                 return result
 
             logger.error(f"YouTube service failed for {url}")
@@ -214,11 +214,11 @@ class RSSService:
         # Check if this is a Reddit URL - if so, use Reddit service
         reddit_service = get_reddit_service()
         if reddit_service.is_reddit_url(url):
-            logger.info(f"🔄 Detected Reddit URL (not RSS): {url}, using Reddit service")
+            logger.debug(f"🔄 Detected Reddit URL (not RSS): {url}, using Reddit service")
             result = await reddit_service.fetch_feed(url)
 
             if result.get("success") and result.get("feed"):
-                logger.info(f"✅ Reddit service provided feed for {url}")
+                logger.debug(f"✅ Reddit service provided feed for {url}")
                 return result
 
             logger.error(f"Reddit service failed for {url}")
@@ -377,7 +377,9 @@ class RSSService:
 
                 # Get session from session manager (domain-aware with rotation)
                 session = await session_manager.get_session(domain)
-                async with session.get(url, headers=headers) as response:
+                # Add timeout (10 seconds default, 5 seconds for health checks)
+                timeout = aiohttp.ClientTimeout(total=10, connect=5)
+                async with session.get(url, headers=headers, timeout=timeout) as response:
                     # Check if we got a 304 Not Modified response
                     if response.status == 304:
                         # Get cached feed for 304 response
@@ -471,8 +473,12 @@ class RSSService:
                     etag = response.headers.get("ETag")
                     last_modified = response.headers.get("Last-Modified")
 
-                    # Read content
+                    # Read content with size limit (10MB max)
+                    max_size = 10 * 1024 * 1024  # 10MB
                     content = await response.text()
+                    if len(content) > max_size:
+                        logger.error(f"Response too large ({len(content)} bytes) for {url}, max {max_size} bytes")
+                        raise Exception(f"Response size exceeds limit: {len(content)} > {max_size}")
 
                     # Parse feed
                     parsed = feedparser.parse(content)
@@ -568,7 +574,7 @@ class RSSService:
                         "description": feed.description,
                         "link": feed.link,
                     }
-                    await cache_service.set(f"feed:{url}", feed_dict, ttl=900)  # 15 minutes (optimized)
+                    await cache_service.set(f"feed:{url}", feed_dict, ttl=1800)  # 30 minutes (optimized for stable feeds)
 
                     if items:
                         logger.debug(f"Cached feed with {len(items)} items: {url}")
@@ -688,7 +694,7 @@ class RSSService:
 
         # If no last item ID, this is the first time processing this feed
         if not last_item_id:
-            logger.info(
+            logger.debug(
                 f"No lastItemId for {url} - First time processing, returning empty (will not process old items)"
             )
             return {
@@ -742,7 +748,7 @@ class RSSService:
                 )
                 if is_newer:
                     new_items.append(item)
-                    logger.info(
+                    logger.debug(
                         f"✅ Found new post: {item.id} (title: {item.title[:50]}) - date {item.pub_date.isoformat()} is newer than "
                         f"lastNotifiedAt {last_item_date.isoformat()}"
                     )
@@ -759,7 +765,7 @@ class RSSService:
                     for item in new_items[:5]
                 ]
             )
-            logger.info(
+            logger.debug(
                 f"✅ Found {len(new_items)} new post(s) out of {total_items_count} total items. "
                 f"New posts: {new_posts_str}"
             )
