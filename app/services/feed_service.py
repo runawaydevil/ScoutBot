@@ -70,7 +70,6 @@ class FeedService:
                 if detected_feeds:
                     # Use first detected feed (preferred: RSS > Atom > JSON)
                     feed_url = detected_feeds[0].url
-                    logger.debug(f"Auto-detected feed from {url}: {feed_url}")
 
             # Validate feed URL (use converted URL for YouTube/Reddit)
             is_valid = await rss_service.validate_feed_url(feed_url)
@@ -187,29 +186,10 @@ class FeedService:
         """Get all enabled feeds"""
         try:
             with database.get_session() as session:
-                # Get total feeds count for diagnostics
-                total_statement = select(Feed)
-                total_feeds = session.exec(total_statement).all()
-                total_count = len(list(total_feeds))
-
                 # Get enabled feeds
                 statement = select(Feed).where(Feed.enabled)
                 feeds = session.exec(statement).all()
-                feeds_list = list(feeds)
-                enabled_count = len(feeds_list)
-
-                logger.debug(
-                    f"📈 Feed statistics: {enabled_count} enabled out of {total_count} total feeds"
-                )
-
-                if enabled_count == 0 and total_count > 0:
-                    logger.warning(
-                        f"⚠️ No enabled feeds found, but {total_count} feed(s) exist in database (they may be disabled)"
-                    )
-                elif total_count == 0:
-                    logger.info("ℹ️ No feeds found in database at all")
-
-                return feeds_list
+                return list(feeds)
         except Exception as e:
             logger.error(f"❌ Failed to get enabled feeds from database: {e}", exc_info=True)
             return []
@@ -228,17 +208,10 @@ class FeedService:
                     feed.last_check = datetime.utcnow()
                     if last_item_id:
                         feed.last_item_id = last_item_id
-                        logger.debug(f"Updated feed {feed.name} lastItemId: {last_item_id}")
                     if last_notified_at:
                         feed.last_notified_at = last_notified_at
-                        logger.debug(
-                            f"Updated feed {feed.name} lastNotifiedAt: {last_notified_at.isoformat()}"
-                        )
                     session.add(feed)
                     session.commit()
-                    logger.debug(
-                        f"Feed {feed.name} last check updated: {feed.last_check.isoformat()}"
-                    )
         except Exception as e:
             logger.error(f"Failed to update feed last check: {e}")
 
