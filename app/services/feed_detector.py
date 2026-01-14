@@ -84,8 +84,12 @@ class FeedDetector:
                 content = await response.text()
                 base_url = str(response.url)
 
-            # Parse HTML
-            soup = BeautifulSoup(content, "html.parser")
+            # Parse HTML (suppress XMLParsedAsHTMLWarning for XML documents)
+            from bs4 import XMLParsedAsHTMLWarning
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+                soup = BeautifulSoup(content, "html.parser")
 
             # Find feeds via <link rel="alternate"> tags
             detected_feeds = self._find_link_tags(soup, base_url)

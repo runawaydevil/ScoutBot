@@ -410,7 +410,6 @@ async def check_feeds_job():
     if is_stopped:
         logger.debug("Feed check skipped - bot is stopped")
         return
-    """APScheduler job function to check all feeds"""
     logger.debug("🔄 Feed checker job started")
     await feed_checker.check_all_feeds()
     logger.debug("✅ Feed checker job completed")
