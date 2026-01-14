@@ -1,0 +1,66 @@
+# Core Dependencies
+aiogram==3.15.0
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic>=2.4.1,<2.10
+pydantic-settings>=2.6.1
+
+# Database
+sqlmodel==0.0.23
+alembic==1.14.0
+
+# HTTP Client & RSS
+aiohttp>=3.9.0,<3.11
+aiohttp[speedups]>=3.9.0,<3.11
+Brotli>=1.1.0
+feedparser==6.0.11
+
+# Redis
+redis>=5.0.0
+
+# Scheduler
+apscheduler==3.10.4
+
+# Observability
+prometheus-client==0.21.0
+structlog==24.4.0
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.12
+psutil==5.9.8
+python-dateutil==2.9.0
+
+# Reddit OAuth (optional)
+requests==2.32.3
+requests-oauthlib==2.0.0
+
+# Video Download Dependencies
+yt-dlp[default,curl-cffi]>=2025.12.08
+yt-dlp-ejs>=0.3.1
+ffmpeg-python>=0.2.0
+ffpb>=0.4.1
+filetype>=1.2.0
+beautifulsoup4>=4.12.3
+tqdm>=4.67.1
+
+# Image Processing Dependencies
+Wand>=0.6.13
+Pillow>=10.0.0
+
+# OCR Dependencies
+pytesseract>=0.3.10
+
+# Spotify Download Dependencies (spotDL)
+spotipy>=2.24.0,<3
+ytmusicapi>=1.11.1,<2
+pytube>=15.0.0  # Removed upper bound to allow latest fixes
+mutagen>=1.47.0,<2
+rapidfuzz>=3.10.1,<4
+python-slugify[unidecode]>=8.0.4,<9
+syncedlyrics>=1.0.1,<2
+soundcloud-v2>=1.6.0,<2
+rich>=13.9.4,<14
+platformdirs>=4.3.6,<5
+pykakasi>=2.3.0,<3
+websockets~=14.1

@@ -1,0 +1,143 @@
+# Dependencies
+node_modules/
+jspm_packages/
+.npm
+.yarn-integrity
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables (IMPORTANTE: nunca commitar .env com chaves/tokens)
+.env
+.env.local
+.env.*
+!.env.example
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+DEPLOY.md
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Test & Coverage
+coverage/
+*.lcov
+.nyc_output
+test-results/
+
+# Cache
+.cache/
+.parcel-cache
+.eslintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rpt2_cache_umd/
+
+# Misc Node
+.node_repl_history
+*.tgz
+
+# Framework-specific (projeto não usa, mas não faz mal ter)
+.next
+.nuxt
+.out
+.storybook-out
+
+# Temporary
+tmp/
+temp/
+
+# Editor
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+# NOTA: .dockerignore NÃO deve estar aqui - é arquivo de config que deve ser versionado!
+docker-compose.override.yml
+
+# Backup
+backup/
+backups/
+*.backup
+*.bak
+
+# Redis
+dump.rdb
+
+# Projeto específico
+.kiro
+how.md
+melhorias.md
+
+# Secrets directory (ignore contents, keep directory structure)
+secrets/*
+!secrets/README.md
+
+# Test scripts
+test_youtube_download.sh
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+venv/
+ENV/
+env/
+.env/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Data directories
+data/
+downloads/
+temp_downloads/

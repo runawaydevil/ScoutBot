@@ -1,0 +1,26 @@
+# Force Unix line endings for shell scripts
+*.sh text eol=lf
+
+# Ensure consistent line endings for text files
+*.md text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Docker files
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+.dockerignore text eol=lf
+
+# Configuration files
+*.env text eol=lf
+*.example text eol=lf
+
+# Prisma files
+*.prisma text eol=lf
+
+# Shell scripts (already covered above but explicit for clarity)
+scripts/*.sh text eol=lf
+
