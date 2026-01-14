@@ -95,9 +95,11 @@ class SpotdlWrapper:
             "print_errors": True,
             "save_errors": None,
             "simple_tui": True,
-            "log_level": "DEBUG",  # Enable debug logging temporarily
+            "log_level": "INFO",  # Reduced from DEBUG for production
             "cookie_file": cookie_file,  # Use cookies if available
             "yt_dlp_args": yt_dlp_args,  # Pass cookies to yt-dlp
+            "filter_results": True,  # Filter search results to get best match
+            "only_verified_results": True,  # Only use verified results for better accuracy
         }
 
         # Initialize spotDL without passing a loop

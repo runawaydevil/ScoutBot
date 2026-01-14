@@ -29,6 +29,17 @@ def configure_third_party_loggers(log_level: int):
 
     # Aiohttp - reduce verbosity
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    
+    # Feedparser - reduce verbosity
+    logging.getLogger("feedparser").setLevel(logging.WARNING)
+    
+    # SQLAlchemy - reduce verbosity in production
+    if settings.environment == "production" and log_level > logging.DEBUG:
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    
+    # Redis - reduce verbosity
+    logging.getLogger("redis").setLevel(logging.WARNING)
 
 
 def configure_logging():

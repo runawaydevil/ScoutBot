@@ -111,6 +111,33 @@ class CacheService:
             logger.error(f"Redis ping failed: {e}")
             return False
 
+    async def cleanup_old_keys(self, pattern: str = "*", max_keys: int = 1000):
+        """Clean up old cache keys matching pattern (memory optimization)"""
+        if self.disabled or not self.redis:
+            return 0
+        
+        try:
+            # Use SCAN to iterate through keys (more memory efficient than KEYS)
+            deleted = 0
+            cursor = 0
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+                if keys:
+                    # Delete keys in batches
+                    for key in keys:
+                        await self.redis.delete(key)
+                        deleted += 1
+                        if deleted >= max_keys:
+                            break
+                if cursor == 0 or deleted >= max_keys:
+                    break
+            if deleted > 0:
+                logger.debug(f"Cleaned up {deleted} old cache keys matching pattern: {pattern}")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to cleanup old cache keys: {e}")
+            return 0
+
     async def close(self):
         """Close Redis connection"""
         if self.redis:

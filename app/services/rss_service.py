@@ -568,7 +568,7 @@ class RSSService:
                         "description": feed.description,
                         "link": feed.link,
                     }
-                    await cache_service.set(f"feed:{url}", feed_dict, ttl=300)  # 5 minutes
+                    await cache_service.set(f"feed:{url}", feed_dict, ttl=900)  # 15 minutes (optimized)
 
                     if items:
                         logger.debug(f"Cached feed with {len(items)} items: {url}")
@@ -579,7 +579,7 @@ class RSSService:
                         await cache_service.set(
                             f"feed_meta:{url}",
                             {"etag": etag, "last_modified": last_modified},
-                            ttl=3600,  # 1 hour
+                            ttl=7200,  # 2 hours (optimized)
                         )
 
                     # Record success for rate limiter, UA pool, and circuit breaker

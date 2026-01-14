@@ -245,7 +245,7 @@ async def setup_feed_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
         """Show when the next RSS feed check will run"""
         try:
             from app.scheduler import scheduler
-            from datetime import datetime, timezone
+            from datetime import datetime, timezone, timedelta
             
             jobs = scheduler.get_jobs()
             feed_job = next((j for j in jobs if j.id == "check_feeds"), None)
@@ -259,18 +259,25 @@ async def setup_feed_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
                 now = datetime.now(timezone.utc)
                 time_until = next_run - now
                 
+                # Get the actual interval from the job trigger
+                job_interval_minutes = 10  # Default fallback
+                if hasattr(feed_job.trigger, 'interval') and hasattr(feed_job.trigger.interval, 'minutes'):
+                    job_interval_minutes = feed_job.trigger.interval.minutes
+                elif hasattr(feed_job.trigger, 'minutes'):
+                    job_interval_minutes = feed_job.trigger.minutes
+                
+                job_interval_seconds = job_interval_minutes * 60
+                
                 # Calculate time components
                 total_seconds = int(time_until.total_seconds())
                 if total_seconds < 0:
-                    # Job should have run already, calculate next interval
-                    minutes_until = 5 - (abs(total_seconds) % 300)
-                    seconds_until = 0
+                    # Job should have run already, calculate next interval based on actual job interval
                     next_run = now.replace(second=0, microsecond=0)
-                    # Round up to next 5-minute mark
+                    # Round up to next interval mark
                     current_minute = next_run.minute
-                    next_minute = ((current_minute // 5) + 1) * 5
+                    next_minute = ((current_minute // job_interval_minutes) + 1) * job_interval_minutes
                     if next_minute >= 60:
-                        next_run = next_run.replace(hour=next_run.hour + 1, minute=0)
+                        next_run = next_run.replace(hour=next_run.hour + 1, minute=next_minute % 60)
                     else:
                         next_run = next_run.replace(minute=next_minute)
                     time_until = next_run - now
@@ -282,25 +289,25 @@ async def setup_feed_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
                     seconds_until = total_seconds % 60
                 
                 # Format response
-                response = "📅 <b>Próxima Verificação RSS</b>\n\n"
-                response += f"⏰ <b>Data/Hora:</b> {next_run.strftime('%Y-%m-%d %H:%M:%S')} UTC\n"
+                response = "📅 <b>Next RSS Check</b>\n\n"
+                response += f"⏰ <b>Date/Time:</b> {next_run.strftime('%Y-%m-%d %H:%M:%S')} UTC\n"
                 
                 if minutes_until > 0:
-                    response += f"⏳ <b>Tempo restante:</b> {minutes_until} min {seconds_until} seg"
+                    response += f"⏳ <b>Time remaining:</b> {minutes_until} min {seconds_until} sec"
                 else:
-                    response += f"⏳ <b>Tempo restante:</b> {seconds_until} seg"
+                    response += f"⏳ <b>Time remaining:</b> {seconds_until} sec"
                 
-                response += f"\n\nℹ️ O job roda a cada <b>5 minutos</b> e verifica quais feeds precisam ser checados baseado no intervalo configurado de cada feed."
+                response += f"\n\nℹ️ The job runs every <b>{job_interval_minutes} minutes</b> and checks which feeds need to be checked based on each feed's configured interval."
                 
                 await message.answer(response)
             else:
                 await message.answer(
-                    "❌ <b>Job de verificação RSS não encontrado</b>\n\n"
-                    "O scheduler pode não estar inicializado ou o job não foi registrado."
+                    "❌ <b>RSS check job not found</b>\n\n"
+                    "The scheduler may not be initialized or the job was not registered."
                 )
         except Exception as e:
             logger.error(f"Failed to get next check time: {e}", exc_info=True)
-            await message.answer("❌ Falha ao verificar próxima execução. Tente novamente.")
+            await message.answer("❌ Failed to check next execution time. Please try again.")
 
     # Block stats command
     @dp.message(Command("blockstats"))

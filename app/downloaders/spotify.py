@@ -132,8 +132,16 @@ class SpotifyDownload(BaseDownloader):
             if not songs:
                 raise ValueError("No songs found for the provided Spotify URL")
 
-            # Limit number of songs for playlists/albums/artists
-            if len(songs) > MAX_SONGS_LIMIT:
+            # For individual tracks, only download the first result
+            if not self._is_batch and url_type == "track":
+                if len(songs) > 1:
+                    logger.info(
+                        f"Track URL detected: found {len(songs)} results, using only the first one"
+                    )
+                    songs = [songs[0]]
+                await self.edit_text("📥 Found song, downloading...")
+            elif len(songs) > MAX_SONGS_LIMIT:
+                # Limit number of songs for playlists/albums/artists
                 logger.warning(
                     f"Found {len(songs)} songs, limiting to {MAX_SONGS_LIMIT}"
                 )

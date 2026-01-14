@@ -83,7 +83,7 @@ class DirectDownload(BaseDownloader):
             command = [
                 "aria2c",
                 "--max-tries=3",
-                "--max-concurrent-downloads=8",
+                "--max-concurrent-downloads=4",  # Reduced from 8 to 4 for resource optimization
                 "--max-connection-per-server=16",
                 "--split=16",
                 "--summary-interval=1",

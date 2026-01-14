@@ -13,9 +13,18 @@ logger = get_logger(__name__)
 
 
 async def cleanup_tempfiles_job():
-    """Clean up old temporary files"""
+    """Clean up old temporary files and old cache entries"""
     try:
         logger.debug("🧹 Starting temporary file cleanup...")
+        
+        # Also cleanup old cache entries for memory optimization
+        from app.utils.cache import cache_service
+        try:
+            deleted = await cache_service.cleanup_old_keys(pattern="feed:*", max_keys=500)
+            if deleted > 0:
+                logger.debug(f"Cleaned up {deleted} old feed cache entries")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup old cache entries: {e}")
 
         temp_path = get_tmpfile_path()
         patterns = ["scoutbot-*", "ytdl-*", "spdl-*", "direct-*"]

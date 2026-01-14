@@ -65,22 +65,22 @@ async def startup_event():
     scheduler.initialize()
     scheduler.start()
 
-    # Add feed checker job (runs every 5 minutes)
+    # Add feed checker job (runs every 10 minutes - optimized for resource usage)
     from app.jobs.feed_checker import check_feeds_job
 
     scheduler.add_interval_job(
         check_feeds_job,
-        minutes=5,
+        minutes=10,
         job_id="check_feeds",
     )
     logger.debug("✅ Feed checker job scheduled")
 
-    # Add blocking monitor job (runs every hour to check success rates)
+    # Add blocking monitor job (runs every 2 hours to check success rates - optimized)
     from app.jobs.blocking_monitor import check_blocking_stats_job, cleanup_blocking_stats_job
 
     scheduler.add_interval_job(
         check_blocking_stats_job,
-        minutes=60,
+        minutes=120,
         job_id="check_blocking_stats",
     )
     logger.debug("✅ Blocking monitor job scheduled")
@@ -94,12 +94,12 @@ async def startup_event():
     )
     logger.debug("✅ Blocking stats cleanup job scheduled")
 
-    # Add temporary file cleanup job (runs every hour)
+    # Add temporary file cleanup job (runs every 2 hours - optimized)
     from app.jobs.tempfile_cleanup import cleanup_tempfiles_job
 
     scheduler.add_interval_job(
         cleanup_tempfiles_job,
-        minutes=60,
+        minutes=120,
         job_id="cleanup_tempfiles",
     )
     logger.debug("✅ Temporary file cleanup job scheduled")

@@ -102,16 +102,27 @@ class DatabaseService:
 
             logger.info(f"Connecting to database: {database_url.split('/')[-1]}")
 
-            # Create engine with SQLite-specific settings
+            # Create engine with SQLite-specific settings and connection pooling
             if database_url.startswith("sqlite:///"):
                 connect_args = {"check_same_thread": False}
+                # SQLite doesn't support pool_size, but we can optimize with other settings
                 self.engine = create_engine(
                     database_url,
                     connect_args=connect_args,
                     echo=False,
+                    pool_pre_ping=True,  # Verify connections before using
+                    pool_recycle=3600,  # Recycle connections after 1 hour
                 )
             else:
-                self.engine = create_engine(database_url, echo=False)
+                # For other databases (PostgreSQL, MySQL, etc.), use connection pooling
+                self.engine = create_engine(
+                    database_url,
+                    echo=False,
+                    pool_pre_ping=True,
+                    pool_size=5,
+                    max_overflow=10,
+                    pool_recycle=3600,
+                )
 
             # Create tables
             SQLModel.metadata.create_all(self.engine)
