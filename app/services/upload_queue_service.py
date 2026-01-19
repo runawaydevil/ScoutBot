@@ -87,8 +87,9 @@ class UploadQueueService:
         # Get file extension
         file_ext = file_path.suffix
         
-        # Create remote path using file code (all files in same folder)
-        remote_path = f"{file_code}{file_ext}"
+        # Create remote path using file code with folder
+        # Save full path in database so download works correctly
+        remote_path = f"{folder}/{file_code}{file_ext}"
         
         # Get file info
         file_info = get_file_info(file_path)
