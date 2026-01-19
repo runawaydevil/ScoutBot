@@ -87,9 +87,9 @@ class UploadQueueService:
         # Get file extension
         file_ext = file_path.suffix
         
-        # Create remote path using just the file code + extension
-        # The folder will be added during upload
-        remote_path = f"{file_code}{file_ext}"
+        # Create remote path with folder included
+        # This will be used as-is in Pentaract (no folder parameter)
+        remote_path = f"{folder}/{file_code}{file_ext}"
         
         # Get file info
         file_info = get_file_info(file_path)
@@ -224,10 +224,11 @@ class UploadQueueService:
                 raise FileNotFoundError(f"File not found: {file_path}")
             
             # Upload to Pentaract
+            # remote_path already includes the folder (e.g., "storage/ABC123.png")
             result = await pentaract_storage.upload_file(
                 file_path=file_path,
                 remote_path=remote_path,
-                folder=folder
+                folder=""  # Don't add folder prefix, it's already in remote_path
             )
             
             if result.get("success"):

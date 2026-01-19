@@ -328,13 +328,9 @@ async def storage_download(message: Message, file_code: str):
         
         try:
             # Download from Pentaract
-            # Add folder prefix if not already present
-            download_path = file_record.remote_path
-            if not download_path.startswith("storage/"):
-                download_path = f"storage/{download_path}"
-            
+            # remote_path already includes folder (e.g., "storage/ABC123.png")
             result = await pentaract_storage.download_file(
-                remote_path=download_path,
+                remote_path=file_record.remote_path,
                 local_path=tmp_path
             )
             
@@ -492,12 +488,8 @@ async def storage_delete_confirm(callback: CallbackQuery):
                     return
                 
                 # Delete file from Pentaract
-                # Add folder prefix if not already present
-                delete_path = file_record.remote_path
-                if not delete_path.startswith("storage/"):
-                    delete_path = f"storage/{delete_path}"
-                
-                success = await pentaract_storage.delete_file(delete_path)
+                # remote_path already includes folder (e.g., "storage/ABC123.png")
+                success = await pentaract_storage.delete_file(file_record.remote_path)
                 
                 if success:
                     # Update database record
@@ -855,12 +847,8 @@ async def storage_cleanall_confirm(callback: CallbackQuery):
                 failed_count = 0
                 
                 for file_record in files:
-                    # Add folder prefix if not already present
-                    delete_path = file_record.remote_path
-                    if not delete_path.startswith("storage/"):
-                        delete_path = f"storage/{delete_path}"
-                    
-                    success = await pentaract_storage.delete_file(delete_path)
+                    # remote_path already includes folder (e.g., "storage/ABC123.png")
+                    success = await pentaract_storage.delete_file(file_record.remote_path)
                     if success:
                         # Update database record
                         file_record.status = "deleted"
