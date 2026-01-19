@@ -16,6 +16,8 @@ from app.models.user_settings import UserSettings
 from app.models.statistics import MessageStatistic, DownloadStatistic, ConversionStatistic
 from app.models.bot_state import BotState
 from app.models.bot_settings import BotSettings
+from app.models.pentaract_upload import PentaractUpload
+from app.models.pentaract_file import PentaractFile
 
 logger = get_logger(__name__)
 

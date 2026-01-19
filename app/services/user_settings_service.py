@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 # Valid values for quality and format
 VALID_QUALITIES = ["high", "medium", "low", "audio", "custom"]
 VALID_FORMATS = ["video", "audio", "document"]
+VALID_STORAGE_PREFERENCES = ["auto", "pentaract", "local"]
 
 
 class UserSettingsService:
@@ -79,6 +80,29 @@ class UserSettingsService:
             session.add(settings)
             session.commit()
             logger.info(f"Updated format for user {user_id}: {format}")
+
+    async def get_storage_preference(self, user_id: str) -> str:
+        """Get user storage preference (auto, pentaract, local)"""
+        settings = await self.get_settings(user_id)
+        return settings.storage_preference
+
+    async def set_storage_preference(self, user_id: str, preference: str):
+        """Set user storage preference"""
+        if preference not in VALID_STORAGE_PREFERENCES:
+            raise ValueError(
+                f"Invalid storage preference: {preference}. "
+                f"Valid values: {VALID_STORAGE_PREFERENCES}"
+            )
+
+        from datetime import datetime
+
+        with database.get_session() as session:
+            settings = await self.get_settings(user_id)
+            settings.storage_preference = preference
+            settings.updated_at = datetime.utcnow()
+            session.add(settings)
+            session.commit()
+            logger.info(f"Updated storage preference for user {user_id}: {preference}")
 
 
 # Global user settings service instance

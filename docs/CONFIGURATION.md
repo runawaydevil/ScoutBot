@@ -85,3 +85,32 @@ BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz-123456789
 ## Features
 
 - `FEATURE_INSTAGRAM` - Enable Instagram integration (default: `false`)
+
+## Pentaract Storage
+
+Pentaract is a storage system that splits files into chunks and stores them in Telegram, providing unlimited storage without local disk usage.
+
+**Required when enabled:**
+- `PENTARACT_ENABLED` - Enable Pentaract integration (default: `false`)
+- `PENTARACT_API_URL` - Pentaract API base URL (default: `http://localhost:8000/api`)
+- `PENTARACT_EMAIL` - Pentaract account email (required when enabled)
+- `PENTARACT_PASSWORD` - Pentaract account password (required when enabled)
+
+**Optional:**
+- `PENTARACT_UPLOAD_THRESHOLD` - Minimum file size in MB for auto-upload (default: `50`)
+- `PENTARACT_AUTO_CLEANUP` - Auto-delete temp files after upload (default: `true`)
+- `PENTARACT_CLEANUP_INTERVAL` - Cleanup interval in minutes (default: `30`)
+- `PENTARACT_MAX_CONCURRENT_UPLOADS` - Max simultaneous uploads (default: `3`)
+- `PENTARACT_TIMEOUT` - API request timeout in seconds (default: `30`)
+- `PENTARACT_RETRY_ATTEMPTS` - Retry attempts for failed uploads (default: `3`)
+
+**Example configuration:**
+```bash
+PENTARACT_ENABLED=true
+PENTARACT_API_URL=http://pentaract:8000/api
+PENTARACT_EMAIL=admin@example.com
+PENTARACT_PASSWORD=secure_password
+PENTARACT_UPLOAD_THRESHOLD=50
+```
+
+See [Pentaract Setup Guide](PENTARACT_SETUP.md) for detailed configuration instructions.

@@ -16,5 +16,9 @@ class UserSettings(SQLModel, table=True):
     quality: str = Field(default="high")
     # Valid values: "video", "audio", "document"
     format: str = Field(default="video")
+    # Storage preference: "auto", "pentaract", "local"
+    storage_preference: str = Field(default="auto", alias="storagePreference")
+    pentaract_auto_upload: bool = Field(default=True, alias="pentaractAutoUpload")
+    pentaract_notify_uploads: bool = Field(default=True, alias="pentaractNotifyUploads")
     created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
     updated_at: datetime = Field(default_factory=datetime.utcnow, alias="updatedAt")

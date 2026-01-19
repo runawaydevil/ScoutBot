@@ -61,10 +61,53 @@ async def startup_event():
     if db_settings:
         logger.debug(f"✅ Loaded {len(db_settings)} settings from database")
 
+    # Log Pentaract configuration (without sensitive data)
+    from app.utils.logger import log_pentaract_config
+    log_pentaract_config(logger, settings)
+
     # Initialize bot state
     from app.services.bot_state_service import bot_state_service
     await bot_state_service.get_state()  # Ensure state exists
     logger.debug("✅ Bot state initialized")
+
+    # Initialize Pentaract storage service if enabled
+    if settings.pentaract_enabled:
+        from app.services.pentaract_storage_service import pentaract_storage
+        try:
+            success = await pentaract_storage.initialize()
+            if success:
+                logger.info("✅ Pentaract storage service initialized")
+            else:
+                logger.warning("⚠️ Pentaract storage service initialization failed")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pentaract storage service: {e}")
+    
+    # Initialize cleanup service if Pentaract is enabled
+    if settings.pentaract_enabled and settings.pentaract_auto_cleanup:
+        from app.services.cleanup_service import cleanup_service
+        try:
+            await cleanup_service.start()
+            logger.info("✅ Cleanup service started")
+        except Exception as e:
+            logger.error(f"Failed to start cleanup service: {e}")
+    
+    # Initialize upload queue service if Pentaract is enabled
+    if settings.pentaract_enabled:
+        from app.services.upload_queue_service import upload_queue_service
+        try:
+            await upload_queue_service.start()
+            logger.info("✅ Upload queue service started")
+        except Exception as e:
+            logger.error(f"Failed to start upload queue service: {e}")
+    
+    # Initialize resource monitoring service
+    if settings.resource_monitoring_enabled:
+        from app.services.resource_monitor_service import resource_monitor
+        try:
+            await resource_monitor.start()
+            logger.info("✅ Resource monitoring service started")
+        except Exception as e:
+            logger.error(f"Failed to start resource monitoring service: {e}")
 
     # Initialize Redis cache
     await cache_service.initialize()
@@ -158,6 +201,42 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.debug("Shutting down ScoutBot application")
+
+    # Stop Pentaract services
+    if settings.pentaract_enabled:
+        try:
+            from app.services.cleanup_service import cleanup_service
+            from app.services.upload_queue_service import upload_queue_service
+            from app.services.pentaract_storage_service import pentaract_storage
+            
+            # Stop upload queue
+            await upload_queue_service.stop()
+            logger.debug("✅ Upload queue service stopped")
+            
+            # Stop cleanup service
+            await cleanup_service.stop()
+            logger.debug("✅ Cleanup service stopped")
+            
+            # Final cleanup of temporary files
+            if settings.pentaract_auto_cleanup:
+                cleaned = await cleanup_service.cleanup_temp_files()
+                if cleaned > 0:
+                    logger.info(f"✅ Cleaned up {cleaned} temporary files on shutdown")
+            
+            # Close Pentaract storage service
+            await pentaract_storage.close()
+            logger.debug("✅ Pentaract storage service closed")
+        except Exception as e:
+            logger.error(f"Error during Pentaract services shutdown: {e}")
+        
+        # Stop resource monitoring service
+        if settings.resource_monitoring_enabled:
+            try:
+                from app.services.resource_monitor_service import resource_monitor
+                await resource_monitor.stop()
+                logger.debug("✅ Resource monitoring service stopped")
+            except Exception as e:
+                logger.error(f"Error stopping resource monitoring service: {e}")
 
     # Stop keep-alive service
     from app.resilience.keep_alive import keep_alive_service

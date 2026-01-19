@@ -43,6 +43,33 @@ services:
       timeout: 3s
       retries: 3
 
+  pentaract:
+    build:
+      context: ./pentaract-api
+      dockerfile: Dockerfile
+    container_name: pentaract
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PENTARACT_EMAIL=${PENTARACT_EMAIL}
+      - PENTARACT_PASSWORD=${PENTARACT_PASSWORD}
+      - PENTARACT_USERNAME=pablo
+    ports:
+      - "8547:8547"
+    volumes:
+      - pentaract_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8547/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
   scoutbot:
     build:
       context: .
@@ -150,6 +177,17 @@ services:
       - SPOTIFY_AUDIO_PROVIDERS=${SPOTIFY_AUDIO_PROVIDERS:-youtube-music,youtube}
       - SPOTIFY_LYRICS_PROVIDERS=${SPOTIFY_LYRICS_PROVIDERS:-genius,musixmatch,azlyrics}
       - SPOTIFY_ENABLED=${SPOTIFY_ENABLED:-true}
+      # Pentaract Storage Configuration
+      - PENTARACT_ENABLED=${PENTARACT_ENABLED:-false}
+      - PENTARACT_API_URL=${PENTARACT_API_URL:-http://localhost:8547/api}
+      - PENTARACT_EMAIL=${PENTARACT_EMAIL}
+      - PENTARACT_PASSWORD=${PENTARACT_PASSWORD}
+      - PENTARACT_UPLOAD_THRESHOLD=${PENTARACT_UPLOAD_THRESHOLD:-50}
+      - PENTARACT_AUTO_CLEANUP=${PENTARACT_AUTO_CLEANUP:-true}
+      - PENTARACT_CLEANUP_INTERVAL=${PENTARACT_CLEANUP_INTERVAL:-30}
+      - PENTARACT_MAX_CONCURRENT_UPLOADS=${PENTARACT_MAX_CONCURRENT_UPLOADS:-3}
+      - PENTARACT_TIMEOUT=${PENTARACT_TIMEOUT:-30}
+      - PENTARACT_RETRY_ATTEMPTS=${PENTARACT_RETRY_ATTEMPTS:-3}
       # YouTube Authentication Configuration (yt-dlp unified)
       - YTDLP_AUTH_MODE=${YTDLP_AUTH_MODE:-both}
       - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-/secrets/youtube-cookies.txt}
@@ -175,6 +213,8 @@ services:
         condition: service_healthy
       telegram-bot-api:
         condition: service_healthy
+      pentaract:
+        condition: service_healthy
     restart: always
     # Enhanced health check with optimized intervals
     healthcheck:
@@ -198,6 +238,8 @@ volumes:
   tmp_data:
     driver: local
   telegram-bot-api-data:
+    driver: local
+  pentaract_data:
     driver: local
 
 networks:

@@ -22,6 +22,7 @@ from app.utils.logger import get_logger
 from app.utils.download_cache import download_cache
 from app.utils.download_utils import sizeof_fmt
 from app.services.user_settings_service import user_settings_service
+from app.services.pentaract_storage_service import pentaract_storage
 from app.downloaders.helper import convert_audio_format, get_metadata as helper_get_metadata, get_caption, generate_thumbnail
 
 logger = get_logger(__name__)
@@ -274,8 +275,272 @@ class BaseDownloader(ABC):
         
         return filtered
 
+    async def _should_use_pentaract(self, file_size: int) -> bool:
+        """
+        Determine if file should be uploaded to Pentaract based on user preference and file size
+        
+        Args:
+            file_size: Size of file in bytes
+            
+        Returns:
+            True if file should be uploaded to Pentaract, False otherwise
+        """
+        # Check if Pentaract is enabled
+        if not settings.pentaract_enabled:
+            logger.debug("Pentaract is disabled in settings")
+            return False
+        
+        # Check if Pentaract service is available
+        if not await pentaract_storage.is_available():
+            logger.warning("Pentaract service is not available")
+            return False
+        
+        # Get user storage preference
+        user_id = str(self._from_user)
+        try:
+            preference = await user_settings_service.get_storage_preference(user_id)
+        except Exception as e:
+            logger.error(f"Failed to get storage preference for user {user_id}: {e}")
+            preference = "auto"
+        
+        # Make decision based on preference
+        if preference == "pentaract":
+            logger.debug(f"User {user_id} prefers Pentaract storage")
+            return True
+        elif preference == "local":
+            logger.debug(f"User {user_id} prefers local (Telegram) storage")
+            return False
+        else:  # "auto"
+            # Use threshold to decide
+            threshold_bytes = settings.pentaract_upload_threshold * 1024 * 1024
+            should_upload = file_size > threshold_bytes
+            logger.debug(
+                f"Auto mode: file size {sizeof_fmt(file_size)} "
+                f"{'exceeds' if should_upload else 'below'} threshold "
+                f"{sizeof_fmt(threshold_bytes)}"
+            )
+            return should_upload
+
+    async def _upload_to_pentaract(self, file_path: Path) -> Dict[str, Any]:
+        """
+        Upload file to Pentaract storage with resource monitoring
+        
+        Args:
+            file_path: Path to file to upload
+            
+        Returns:
+            Dict with upload result information
+            
+        Raises:
+            Exception if upload fails
+        """
+        from uuid import uuid4
+        from app.models.pentaract_file import PentaractFile
+        from app.models.pentaract_upload import PentaractUpload
+        from app.database import database
+        from datetime import datetime
+        from app.services.resource_monitor_service import resource_monitor
+        import mimetypes
+        
+        # Check resources before upload
+        await resource_monitor.wait_if_throttled("Pentaract upload")
+        
+        user_id = str(self._from_user)
+        filename = file_path.name
+        file_size = file_path.stat().st_size
+        
+        # Create upload tracking record
+        upload_id = str(uuid4())
+        upload_record = PentaractUpload(
+            id=upload_id,
+            user_id=user_id,
+            file_path=str(file_path),
+            remote_path="",  # Will be updated after upload
+            file_size=file_size,
+            status="pending",
+            upload_started_at=datetime.utcnow(),
+        )
+        
+        # Save upload record
+        try:
+            with database.get_session() as session:
+                session.add(upload_record)
+                session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to save upload record: {e}")
+        
+        # Notify user that upload is starting
+        await self.edit_text("📤 Uploading to Pentaract storage...")
+        logger.info(f"Starting Pentaract upload for {filename} ({sizeof_fmt(file_size)})")
+        
+        try:
+            # Update status to uploading
+            upload_record.status = "uploading"
+            try:
+                with database.get_session() as session:
+                    session.add(upload_record)
+                    session.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update upload status: {e}")
+            
+            # Determine folder based on downloader type
+            downloader_type = self.__class__.__name__.replace("Downloader", "").lower()
+            folder = f"downloads/{downloader_type}"
+            
+            # Generate remote path
+            remote_path = f"{folder}/{filename}"
+            upload_record.remote_path = remote_path
+            
+            # Upload to Pentaract
+            result = await pentaract_storage.upload_file(
+                file_path=file_path,
+                remote_path=remote_path,
+                folder=folder
+            )
+            
+            if result.get("success"):
+                logger.info(f"Successfully uploaded {filename} to Pentaract")
+                
+                # Update upload record to completed
+                upload_record.status = "completed"
+                upload_record.upload_completed_at = datetime.utcnow()
+                try:
+                    with database.get_session() as session:
+                        session.add(upload_record)
+                        session.commit()
+                except Exception as e:
+                    logger.warning(f"Failed to update upload record: {e}")
+                
+                # Save file metadata
+                file_id = str(uuid4())
+                mime_type, _ = mimetypes.guess_type(filename)
+                
+                file_record = PentaractFile(
+                    id=file_id,
+                    user_id=user_id,
+                    remote_path=remote_path,
+                    filename=filename,
+                    file_size=file_size,
+                    mime_type=mime_type,
+                    folder=folder,
+                    uploaded_at=datetime.utcnow(),
+                )
+                
+                try:
+                    with database.get_session() as session:
+                        session.add(file_record)
+                        session.commit()
+                        logger.info(f"Saved file metadata for {filename}")
+                except Exception as e:
+                    logger.error(f"Failed to save file metadata: {e}")
+                
+                # Notify user of successful upload
+                file_info = (
+                    f"✅ File uploaded to Pentaract storage\n\n"
+                    f"📁 Name: {filename}\n"
+                    f"📊 Size: {sizeof_fmt(file_size)}\n"
+                    f"📍 Location: {remote_path}"
+                )
+                await self.edit_text(file_info)
+                
+                # Trigger garbage collection after upload if enabled
+                if settings.resource_gc_after_upload:
+                    logger.debug("Running garbage collection after Pentaract upload")
+                    gc.collect()
+                
+                return {
+                    "success": True,
+                    "remote_path": remote_path,
+                    "file_size": file_size,
+                    "filename": filename,
+                }
+            else:
+                error_msg = result.get("error", "Unknown error")
+                logger.error(f"Pentaract upload failed: {error_msg}")
+                
+                # Update upload record to failed
+                upload_record.status = "failed"
+                upload_record.error_message = error_msg
+                upload_record.upload_completed_at = datetime.utcnow()
+                try:
+                    with database.get_session() as session:
+                        session.add(upload_record)
+                        session.commit()
+                except Exception as e:
+                    logger.warning(f"Failed to update upload record: {e}")
+                
+                raise Exception(f"Pentaract upload failed: {error_msg}")
+                
+        except Exception as e:
+            logger.error(f"Error uploading to Pentaract: {e}", exc_info=True)
+            
+            # Update upload record to failed
+            upload_record.status = "failed"
+            upload_record.error_message = str(e)
+            upload_record.upload_completed_at = datetime.utcnow()
+            upload_record.retry_count += 1
+            try:
+                with database.get_session() as session:
+                    session.add(upload_record)
+                    session.commit()
+            except Exception as db_error:
+                logger.warning(f"Failed to update upload record: {db_error}")
+            
+            raise
+
+    async def _handle_pentaract_upload(self, files: List[Path]) -> bool:
+        """
+        Handle upload to Pentaract with fallback to Telegram
+        
+        Args:
+            files: List of files to upload
+            
+        Returns:
+            True if upload was successful (either Pentaract or Telegram fallback)
+        """
+        if not files:
+            return False
+        
+        file_path = files[0]
+        file_size = file_path.stat().st_size
+        
+        # Check if should use Pentaract
+        should_use_pentaract = await self._should_use_pentaract(file_size)
+        
+        if should_use_pentaract:
+            try:
+                # Try Pentaract upload
+                await self._upload_to_pentaract(file_path)
+                
+                # Record successful upload statistic
+                try:
+                    from app.services.statistics_service import statistics_service
+                    chat_id = str(self._chat_id)
+                    downloader_type = self.__class__.__name__.replace("Downloader", "").lower()
+                    await statistics_service.record_download(
+                        downloader_type=downloader_type,
+                        status="success",
+                        chat_id=chat_id,
+                        file_size=file_size,
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed to record download statistic: {e}")
+                
+                return True
+                
+            except Exception as e:
+                # Pentaract upload failed, fallback to Telegram
+                logger.warning(f"Pentaract upload failed, falling back to Telegram: {e}")
+                await self.edit_text(
+                    "⚠️ Pentaract upload failed, sending via Telegram instead..."
+                )
+                # Continue to regular Telegram upload below
+        
+        # Upload to Telegram (either by choice or as fallback)
+        return False  # Indicate that Pentaract upload was not used
+
     async def _upload(self, files: Optional[List[Path]] = None, meta: Optional[Dict[str, Any]] = None):
-        """Upload files to Telegram"""
+        """Upload files to Telegram or Pentaract based on user preference"""
         if files is None:
             files = list(Path(self._tempdir.name).glob("*"))
             # Filter out temporary files (cookies, metadata, etc.)
@@ -284,6 +549,15 @@ class BaseDownloader(ABC):
         if not files:
             raise ValueError("No files to upload")
 
+        # Try Pentaract upload first if applicable
+        pentaract_used = await self._handle_pentaract_upload(files)
+        if pentaract_used:
+            # File was uploaded to Pentaract successfully
+            # Trigger garbage collection after large operations
+            gc.collect()
+            return None  # No Telegram message to return
+
+        # Continue with regular Telegram upload
         # Get metadata if not provided
         if meta is None:
             video_path = files[0]

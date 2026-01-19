@@ -200,5 +200,33 @@ def sanitize_cookie_content(content: str, max_length: int = 100) -> str:
     return content
 
 
+def log_pentaract_config(logger: Any, config: Any) -> None:
+    """
+    Log Pentaract configuration safely without exposing credentials.
+    
+    Args:
+        logger: Logger instance
+        config: Settings object with Pentaract configuration
+    """
+    if not config.pentaract_enabled:
+        logger.info("pentaract_config_loaded", enabled=False)
+        return
+    
+    # Log configuration without sensitive data
+    logger.info(
+        "pentaract_config_loaded",
+        enabled=config.pentaract_enabled,
+        api_url=config.pentaract_api_url,
+        email=config.pentaract_email if config.pentaract_email else "[NOT_SET]",
+        password="[REDACTED]" if config.pentaract_password else "[NOT_SET]",
+        upload_threshold_mb=config.pentaract_upload_threshold,
+        auto_cleanup=config.pentaract_auto_cleanup,
+        cleanup_interval_minutes=config.pentaract_cleanup_interval,
+        max_concurrent_uploads=config.pentaract_max_concurrent_uploads,
+        timeout_seconds=config.pentaract_timeout,
+        retry_attempts=config.pentaract_retry_attempts,
+    )
+
+
 # Configure logging on import
 configure_logging()

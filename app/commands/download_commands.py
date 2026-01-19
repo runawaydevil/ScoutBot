@@ -70,13 +70,15 @@ async def _show_settings_category(callback_query: CallbackQuery, category: str, 
     text = f"⚙️ <b>Settings - {category.capitalize()}</b>\n\n"
 
     if category == "user":
-        # User settings (format/quality)
+        # User settings (format/quality/storage)
         quality = await user_settings_service.get_quality(user_id)
         format_type = await user_settings_service.get_format(user_id)
+        storage_pref = await user_settings_service.get_storage_preference(user_id)
 
         text += f"<b>Current:</b>\n"
         text += f"Quality: <b>{quality.upper()}</b>\n"
-        text += f"Format: <b>{format_type.upper()}</b>\n\n"
+        text += f"Format: <b>{format_type.upper()}</b>\n"
+        text += f"Storage: <b>{storage_pref.upper()}</b>\n\n"
 
         buttons.append([
             InlineKeyboardButton(
@@ -106,6 +108,24 @@ async def _show_settings_category(callback_query: CallbackQuery, category: str, 
                 callback_data="quality:low",
             ),
         ])
+        
+        # Add storage preference buttons if Pentaract is enabled
+        from app.config import settings as app_settings
+        if app_settings.pentaract_enabled:
+            buttons.append([
+                InlineKeyboardButton(
+                    text="🤖 Auto" if storage_pref == "auto" else "Auto",
+                    callback_data="storage:auto",
+                ),
+                InlineKeyboardButton(
+                    text="☁️ Pentaract" if storage_pref == "pentaract" else "Pentaract",
+                    callback_data="storage:pentaract",
+                ),
+                InlineKeyboardButton(
+                    text="📱 Local" if storage_pref == "local" else "Local",
+                    callback_data="storage:local",
+                ),
+            ])
     else:
         # Bot settings by category
         settings_list = await bot_settings_service.get_settings_by_category(category)
@@ -315,6 +335,7 @@ Select a category to configure:
         c.data.startswith("settings_cat:") or
         c.data.startswith("format:") or
         c.data.startswith("quality:") or
+        c.data.startswith("storage:") or
         c.data.startswith("setting_toggle:") or
         c.data.startswith("setting_edit:")
     ))
@@ -371,8 +392,8 @@ Select a category to configure:
                 await callback_query.answer()
                 return
 
-            # User settings (format/quality)
-            if data.startswith("format:") or data.startswith("quality:"):
+            # User settings (format/quality/storage)
+            if data.startswith("format:") or data.startswith("quality:") or data.startswith("storage:"):
                 if data.startswith("format:"):
                     format_type = data.split(":")[1]
                     await user_settings_service.set_format(user_id, format_type)
@@ -381,6 +402,10 @@ Select a category to configure:
                     quality = data.split(":")[1]
                     await user_settings_service.set_quality(user_id, quality)
                     await callback_query.answer(f"Quality set to {quality}")
+                elif data.startswith("storage:"):
+                    storage_pref = data.split(":")[1]
+                    await user_settings_service.set_storage_preference(user_id, storage_pref)
+                    await callback_query.answer(f"Storage preference set to {storage_pref}")
 
                 # Refresh user settings display
                 await _show_settings_category(callback_query, "user", user_id)

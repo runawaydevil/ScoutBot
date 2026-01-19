@@ -68,6 +68,7 @@ temp/
 # Editor
 .vscode/
 .idea/
+.kiro/
 .cursor/
 *.swp
 *.swo
@@ -99,6 +100,9 @@ dump.rdb
 .kiro
 how.md
 melhorias.md
+
+# Pentaract server (should be run separately)
+Pentaract/
 
 # Secrets directory (ignore contents, keep directory structure)
 secrets/*

@@ -255,6 +255,47 @@ class Settings(BaseSettings):
     spotify_lyrics_providers: str = Field(default="genius,musixmatch,azlyrics", description="Comma-separated list of lyrics providers (genius, musixmatch, azlyrics, synced)")
     spotify_enabled: bool = Field(default=True, description="Enable Spotify download functionality")
 
+    # Pentaract Storage Configuration
+    pentaract_enabled: bool = Field(default=False, description="Enable Pentaract storage integration")
+    pentaract_api_url: str = Field(default="http://localhost:8547/api", description="Pentaract API base URL")
+    pentaract_email: Optional[str] = Field(default=None, description="Pentaract account email")
+    pentaract_password: Optional[str] = Field(default=None, description="Pentaract account password")
+    pentaract_upload_threshold: int = Field(default=50, description="Minimum file size (MB) for automatic Pentaract upload")
+    pentaract_auto_cleanup: bool = Field(default=True, description="Automatically cleanup temp files after upload")
+    pentaract_cleanup_interval: int = Field(default=30, description="Cleanup interval in minutes")
+    pentaract_max_concurrent_uploads: int = Field(default=3, description="Maximum concurrent uploads to Pentaract")
+    pentaract_timeout: int = Field(default=30, description="API request timeout in seconds")
+    pentaract_retry_attempts: int = Field(default=3, description="Number of retry attempts for failed uploads")
+    
+    # Resource Optimization Configuration
+    resource_monitoring_enabled: bool = Field(default=True, description="Enable resource monitoring (CPU, memory)")
+    resource_monitoring_interval: int = Field(default=10, description="Resource monitoring interval in minutes")
+    resource_cpu_threshold: float = Field(default=80.0, description="CPU usage threshold percentage for throttling")
+    resource_memory_threshold: float = Field(default=80.0, description="Memory usage threshold percentage for throttling")
+    resource_max_memory_mb: int = Field(default=500, description="Maximum memory usage per operation in MB")
+    resource_streaming_chunk_size: int = Field(default=1048576, description="Chunk size for streaming uploads in bytes (default: 1MB)")
+    resource_gc_after_upload: bool = Field(default=True, description="Run garbage collection after each upload")
+
+    @model_validator(mode="after")
+    def validate_pentaract_config(self) -> "Settings":
+        """Validate Pentaract configuration when enabled"""
+        if self.pentaract_enabled:
+            missing_fields = []
+            # Check API URL (even though it has a default, check if it's been explicitly cleared)
+            if not self.pentaract_api_url or self.pentaract_api_url.strip() == "":
+                missing_fields.append("pentaract_api_url")
+            if not self.pentaract_email:
+                missing_fields.append("pentaract_email")
+            if not self.pentaract_password:
+                missing_fields.append("pentaract_password")
+            
+            if missing_fields:
+                raise ValueError(
+                    f"Pentaract is enabled but required fields are missing: {', '.join(missing_fields)}"
+                )
+        
+        return self
+
 
 # Global settings instance
 settings = Settings()

@@ -80,6 +80,49 @@ All media commands return ZIP files.
 - YouTube, Spotify, Instagram, Pixeldrain, KrakenFiles
 - Direct file URLs
 
+## Pentaract Storage (Optional)
+
+If Pentaract storage is enabled, manage your cloud-stored files:
+
+**List files:**
+```
+/storage list
+/storage list downloads/youtube
+```
+
+**Download file:**
+```
+/storage download video.mp4
+/storage download downloads/youtube/video.mp4
+```
+
+**Delete file:**
+```
+/storage delete video.mp4
+```
+Requires confirmation before deletion.
+
+**View statistics:**
+```
+/storage stats
+```
+Shows total files, storage used, upload statistics, and success rate.
+
+**File information:**
+```
+/storage info video.mp4
+```
+Shows file name, size, type, and upload date.
+
+**Storage Preferences:**
+Configure via `/settings`:
+- **Auto** - Files larger than threshold (default: 50MB) upload to Pentaract
+- **Pentaract** - All files upload to Pentaract (unlimited storage)
+- **Local** - All files use local Telegram storage (50MB limit per file)
+
+**Fallback Strategy:**
+If Pentaract is unavailable, files automatically fallback to local Telegram storage. You'll be notified when fallback occurs.
+
 ## File Naming
 
 - ZIP files: `scoutbot{format}.zip` (e.g., `scoutbotpng.zip`)
@@ -112,4 +155,10 @@ Paste any URL in chat - bot automatically detects and offers action buttons (Dow
 /clip https://youtube.com/watch?v=... 0:30 10
 /gif https://youtube.com/watch?v=... 0:30 5
 /convert png (with image attached)
+
+# Pentaract Storage (if enabled)
+/storage list
+/storage download video.mp4
+/storage stats
+/settings  # Configure storage preference
 ```

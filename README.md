@@ -31,6 +31,7 @@ docker-compose up -d --build
 - Media processing (clip, GIF, audio extraction, compression, subtitles)
 - Image tools (convert, sticker, meme, OCR)
 - Anti-blocking system with rate limiting and circuit breakers
+- **Pentaract Storage** - Unlimited cloud storage via Telegram chunks (optional)
 
 ## Installation
 
@@ -71,6 +72,13 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for details.
 - `/sticker` - Convert to sticker
 - `/meme <top> <bottom>` - Create meme
 
+**Storage:**
+- `/storage` + file - Upload file (get unique code)
+- `/storage list` - List files with codes
+- `/storage download <code>` - Download by code
+- `/storage delete <code>` - Delete file
+- `/storage stats` - Storage statistics
+
 See [docs/USAGE.md](docs/USAGE.md) for complete command reference.
 
 ## Configuration
@@ -84,6 +92,7 @@ Optional: See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options.
 - [Installation](docs/INSTALLATION.md)
 - [Usage Guide](docs/USAGE.md)
 - [Configuration](docs/CONFIGURATION.md)
+- [Pentaract Storage Setup](docs/PENTARACT_SETUP.md)
 - [VPS Setup](docs/VPS_SETUP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
@@ -94,6 +103,55 @@ Python 3.11+, FastAPI, aiogram, SQLModel, APScheduler, yt-dlp, FFmpeg, Redis, Do
 ## License
 
 MIT License - see [LICENSE](LICENSE)
+
+---
+
+## 📦 Pentaract Storage (Optional)
+
+ScoutBot includes **Pentaract Storage** - a system that stores files with unique codes for easy retrieval.
+
+> **✅ INCLUDED:** Pentaract runs as a container in docker-compose.yml. No separate deployment needed!
+
+**Benefits:**
+- ✅ Organized file storage with unique codes
+- ✅ Easy file retrieval (just remember the code)
+- ✅ Security validation (blocks dangerous files)
+- ✅ Automatic upload for large files (>50MB)
+- ✅ User access control
+
+**Quick Setup:**
+1. Deploy Pentaract server (included in docker-compose.yml)
+2. Configure `.env`:
+   ```bash
+   PENTARACT_ENABLED=true
+   PENTARACT_API_URL=http://pentaract:8547/api
+   PENTARACT_EMAIL=your_email@example.com
+   PENTARACT_PASSWORD=your_password
+   PENTARACT_UPLOAD_THRESHOLD=50  # Files > 50MB auto-upload
+   ```
+3. Restart ScoutBot: `docker-compose up -d --build`
+4. User is created automatically on first startup
+
+**Storage Commands:**
+- `/storage` + file attachment - Upload file to storage
+- `/storage list` - List your files with codes
+- `/storage download <code>` - Download file by code (e.g., ABC123)
+- `/storage delete <code>` - Delete file by code
+- `/storage stats` - View storage statistics
+- `/storage info <code>` - File information
+
+**How it works:**
+1. Send a file with `/storage` command as caption
+2. Bot generates a unique 6-character code (e.g., ABC123)
+3. File is uploaded to Pentaract storage
+4. Use the code to download, delete, or get info
+
+**Security:**
+- Blocks dangerous executables (.exe, .sh, .bat, etc.) unless zipped
+- Only authorized users can upload files
+- Each file gets a unique code for easy access
+
+See [Pentaract Storage Setup Guide](docs/PENTARACT_SETUP.md) for detailed configuration.
 
 ---
 
