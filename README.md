@@ -28,7 +28,7 @@ docker-compose up -d --build
 - Platform support: YouTube, Reddit, Medium, Substack, Dev.to, WordPress, Vimeo, GitHub, GitLab, Mastodon
 - Video downloads (YouTube and other platforms)
 - Music downloads (Spotify tracks, playlists, albums, artists)
-- Media processing (clip, GIF, audio extraction, compression, subtitles, frames)
+- Media processing (clip, GIF, audio extraction, compression, subtitles)
 - Image tools (convert, sticker, meme, OCR)
 - Anti-blocking system with rate limiting and circuit breakers
 

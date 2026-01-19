@@ -62,7 +62,6 @@ All media commands return ZIP files.
 - `/audio <url> [format]` - Extract audio (mp3, m4a, opus, wav)
 - `/compress <file>` - Compress for Telegram
 - `/subs <url>` - Download subtitles
-- `/frames <url> [count]` - Thumbnail grid
 
 **Images:**
 - `/convert <format>` - Convert format (PNG, JPG, WEBP, etc.) - batch up to 20 images

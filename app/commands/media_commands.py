@@ -363,18 +363,30 @@ def setup_media_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
         if start_time is None:
             start_time = 0.0
         
+        # Validate start_time is not negative
+        if start_time < 0:
+            await message.answer(
+                "❌ <b>Invalid start time.</b>\n\n"
+                "Start time cannot be negative."
+            )
+            return
+        
+        # Store probe result to reuse later (avoid duplicate probes)
+        cached_probe = None
+        cached_video_duration = None
+        
         if duration is None:
             # Default duration: 5 seconds or video length if shorter
             duration = 5.0
             # Try to get video duration if video is already downloaded
             if video_path and video_path.exists():
                 try:
-                    probe = ffmpeg.probe(str(video_path))
-                    video_stream = next((s for s in probe.get("streams", []) if s.get("codec_type") == "video"), None)
+                    cached_probe = ffmpeg.probe(str(video_path))
+                    video_stream = next((s for s in cached_probe.get("streams", []) if s.get("codec_type") == "video"), None)
                     if video_stream:
-                        video_duration = float(video_stream.get("duration", 0))
-                        if video_duration > 0:
-                            duration = min(5.0, video_duration)
+                        cached_video_duration = float(video_stream.get("duration", 0))
+                        if cached_video_duration > 0:
+                            duration = min(5.0, cached_video_duration)
                 except Exception:
                     pass  # Use default 5 seconds
         
@@ -387,7 +399,8 @@ def setup_media_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
         if duration > max_duration:
             await message.answer(
                 f"❌ <b>Duration too long.</b>\n\n"
-                f"Maximum duration is {max_duration} seconds for GIFs."
+                f"Maximum GIF duration is {max_duration} seconds.\n"
+                f"Requested: {format_time(duration)}"
             )
             return
         
@@ -400,6 +413,51 @@ def setup_media_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
                 if not video_path or not video_path.exists():
                     await bot_msg.edit_text("❌ Failed to download video")
                     return
+            
+            # Get video duration and validate limits
+            await bot_msg.edit_text("📊 Checking video duration...")
+            try:
+                # Reuse cached probe if available, otherwise probe now
+                if cached_probe is not None and cached_video_duration is not None:
+                    probe = cached_probe
+                    video_duration = cached_video_duration
+                else:
+                    probe = ffmpeg.probe(str(video_path))
+                    video_stream = next((s for s in probe.get("streams", []) if s.get("codec_type") == "video"), None)
+                    if not video_stream:
+                        await bot_msg.edit_text("❌ Could not determine video duration")
+                        return
+                    video_duration = float(video_stream.get("duration", 0))
+                
+                if video_duration is None or video_duration <= 0:
+                    await bot_msg.edit_text("❌ Could not determine video duration")
+                    return
+                
+                # Check maximum video duration limit
+                max_video_duration = getattr(settings, 'gif_max_video_duration', 900)
+                if video_duration > max_video_duration:
+                    await bot_msg.edit_text(
+                        f"❌ <b>Video too long.</b>\n\n"
+                        f"Video duration: {format_time(video_duration)}\n"
+                        f"Maximum allowed: {format_time(max_video_duration)}\n\n"
+                        f"Please use /clip to extract a shorter segment first."
+                    )
+                    return
+                
+                # Validate that start_time + duration doesn't exceed video duration
+                if start_time + duration > video_duration:
+                    await bot_msg.edit_text(
+                        f"❌ <b>Time range exceeds video duration.</b>\n\n"
+                        f"Video duration: {format_time(video_duration)}\n"
+                        f"Requested range: {format_time(start_time)} - {format_time(start_time + duration)}\n\n"
+                        f"Please adjust the start time or duration."
+                    )
+                    return
+                    
+            except Exception as e:
+                logger.error(f"Failed to probe video: {e}")
+                await bot_msg.edit_text("❌ Failed to check video duration")
+                return
             
             await bot_msg.edit_text("🎬 Generating GIF...")
             
@@ -590,131 +648,6 @@ def setup_media_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
             if len(error_msg) > 500:
                 error_msg = error_msg[:500] + "..."
             await bot_msg.edit_text(f"❌ Failed to download subtitles: {error_msg}")
-    
-    @dp.message(Command("frames"))
-    async def frames_command(message: Message):
-        """Generate thumbnail grid from video"""
-        if not settings.enable_ffmpeg:
-            await message.answer(
-                "❌ <b>FFmpeg is disabled.</b>\n\n"
-                "Frame extraction requires FFmpeg to be enabled."
-            )
-            return
-        
-        if not check_ffmpeg_available():
-            await message.answer("❌ <b>FFmpeg not available.</b>")
-            return
-        
-        message_text = message.text or ""
-        parts = message_text.split()
-        
-        if len(parts) < 2:
-            await message.answer(
-                "❌ <b>Invalid syntax.</b>\n\n"
-                "Usage: /frames &lt;url&gt; [count]\n\n"
-                "Example: /frames https://youtube.com/watch?v=... 9"
-            )
-            return
-        
-        url = parts[1]
-        frame_count = 9  # Default
-        
-        if len(parts) >= 3:
-            try:
-                frame_count = int(parts[2])
-                if frame_count < 1 or frame_count > 20:
-                    frame_count = 9
-            except ValueError:
-                pass
-        
-        bot_msg = await message.answer("📥 Downloading video...")
-        
-        try:
-            # Download video
-            video_path = await download_video_for_processing(bot, bot_msg, url)
-            if not video_path or not video_path.exists():
-                await bot_msg.edit_text("❌ Failed to download video")
-                return
-            
-            await bot_msg.edit_text(f"🖼️ Extracting {frame_count} frames...")
-            
-            # Get video duration
-            probe = ffmpeg.probe(str(video_path))
-            streams = probe.get('streams', [])
-            if not streams:
-                await bot_msg.edit_text("❌ Could not determine video duration")
-                return
-            duration = float(streams[0].get('duration', 0))
-            
-            if duration == 0:
-                await bot_msg.edit_text("❌ Could not determine video duration")
-                return
-            
-            # Extract frames evenly distributed
-            frame_interval = duration / (frame_count + 1)
-            frame_paths = []
-            
-            with tempfile.TemporaryDirectory() as tempdir:
-                for i in range(1, frame_count + 1):
-                    timestamp = frame_interval * i
-                    frame_path = Path(tempdir) / f"frame_{i:02d}.jpg"
-                    
-                    stream = ffmpeg.input(str(video_path), ss=timestamp)
-                    stream = ffmpeg.output(stream, str(frame_path), vframes=1, **{'qscale:v': 2})
-                    ffmpeg.run(stream, overwrite_output=True, quiet=True)
-                    
-                    if frame_path.exists():
-                        frame_paths.append(frame_path)
-                
-                if not frame_paths:
-                    await bot_msg.edit_text("❌ Failed to extract frames")
-                    return
-                
-                await bot_msg.edit_text("📦 Creating ZIP archive...")
-                
-                # Rename frames to scoutbot1.jpg, scoutbot2.jpg, etc.
-                renamed_frames = []
-                internal_names = []
-                for idx, frame_path in enumerate(frame_paths, 1):
-                    new_name = frame_path.parent / f"scoutbot{idx}.jpg"
-                    frame_path.rename(new_name)
-                    renamed_frames.append(new_name)
-                    internal_names.append(f"scoutbot{idx}.jpg")
-                
-                # Create ZIP file with standardized name
-                zip_path = renamed_frames[0].parent / "scoutbotframes.zip"
-                if not create_zip_from_files(renamed_frames, zip_path, internal_names=internal_names):
-                    await bot_msg.edit_text("❌ Failed to create ZIP file")
-                    return
-                
-                await bot_msg.edit_text("📤 Uploading ZIP file...")
-                
-                # Upload ZIP as document
-                file = FSInputFile(zip_path, filename=zip_path.name)
-                await bot.send_document(
-                    chat_id=message.chat.id,
-                    document=file,
-                    caption=f"Video frames (ZIP): {len(frame_paths)} frames extracted"
-                )
-                
-                await bot_msg.delete()
-                
-                # Cleanup
-                try:
-                    for renamed_frame in renamed_frames:
-                        renamed_frame.unlink()
-                    zip_path.unlink()
-                    if video_path.parent != Path(tempfile.gettempdir()):
-                        video_path.unlink()
-                except Exception:
-                    pass
-                
-        except Exception as e:
-            logger.error(f"Frames command failed: {e}", exc_info=True)
-            error_msg = str(e)
-            if len(error_msg) > 500:
-                error_msg = error_msg[:500] + "..."
-            await bot_msg.edit_text(f"❌ Frame extraction failed: {error_msg}")
     
     @dp.message(Command("compress"))
     async def compress_command(message: Message):

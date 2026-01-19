@@ -195,6 +195,7 @@ class Settings(BaseSettings):
     enable_gif: bool = Field(default=True, description="Enable /gif command")
     max_gif_size: int = Field(default=10, description="Maximum GIF size in MB")
     gif_duration_limit: int = Field(default=15, description="Maximum GIF duration in seconds")
+    gif_max_video_duration: int = Field(default=900, description="Maximum source video duration in seconds for GIF generation (default: 900 = 15 minutes)")
     
     # Job System Configuration
     job_queue_backend: str = Field(default="apscheduler", description="Job queue backend (apscheduler or celery)")

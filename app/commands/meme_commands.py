@@ -47,7 +47,8 @@ def setup_meme_commands(dp: Optional[Dispatcher], bot: Optional[Bot]):
             await message.answer("❌ <b>ImageMagick not available.</b>")
             return
         
-        message_text = message.text or ""
+        # Use message.text or message.caption (when image is attached, text is in caption)
+        message_text = message.text or message.caption or ""
         parts = message_text.split()
         
         # Check if message has image and text

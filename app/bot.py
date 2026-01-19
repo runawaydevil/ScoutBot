@@ -336,7 +336,6 @@ ScoutBot v0.03 - Help (Page 2)
 /clip - Extract video clip
 /audio - Extract audio from video
 /compress - Compress video
-/frames - Extract frames from video
 /meme - Generate meme
 /sticker - Create sticker
 /subs - Extract subtitles
