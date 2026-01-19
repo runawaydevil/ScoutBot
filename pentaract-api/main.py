@@ -2,7 +2,7 @@
 Pentaract API - Minimal implementation for ScoutBot integration
 """
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Header
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import os
@@ -217,7 +217,7 @@ async def delete_file(
     if metadata_path.exists():
         metadata_path.unlink()
     
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 @app.get("/api/files/info")
 async def get_file_info(
