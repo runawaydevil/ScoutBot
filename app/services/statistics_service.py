@@ -27,10 +27,12 @@ class StatisticsBuffer:
         self.conversion_buffer: List[Dict[str, Any]] = []
         self.last_flush = time.time()
         self._lock = asyncio.Lock()
+        self._flushing = False
         self._flush_task: Optional[asyncio.Task] = None
     
     async def add_message(self, message_type: str, chat_id: Optional[str] = None, command: Optional[str] = None):
         """Add message statistic to buffer"""
+        should_flush = False
         async with self._lock:
             self.message_buffer.append({
                 "id": str(uuid4()),
@@ -40,7 +42,14 @@ class StatisticsBuffer:
                 "count": 1,
                 "date": datetime.utcnow(),
             })
-            await self._check_flush()
+            # Check flush conditions while holding lock
+            total_size = len(self.message_buffer) + len(self.download_buffer) + len(self.conversion_buffer)
+            time_since_flush = time.time() - self.last_flush
+            should_flush = (total_size >= self.max_size or time_since_flush >= self.flush_interval) and not self._flushing
+        
+        # Schedule flush as background task outside the lock
+        if should_flush:
+            self._schedule_flush()
     
     async def add_download(
         self,
@@ -52,6 +61,7 @@ class StatisticsBuffer:
         error_message: Optional[str] = None,
     ):
         """Add download statistic to buffer"""
+        should_flush = False
         async with self._lock:
             self.download_buffer.append({
                 "id": str(uuid4()),
@@ -63,7 +73,14 @@ class StatisticsBuffer:
                 "error_message": error_message,
                 "date": datetime.utcnow(),
             })
-            await self._check_flush()
+            # Check flush conditions while holding lock
+            total_size = len(self.message_buffer) + len(self.download_buffer) + len(self.conversion_buffer)
+            time_since_flush = time.time() - self.last_flush
+            should_flush = (total_size >= self.max_size or time_since_flush >= self.flush_interval) and not self._flushing
+        
+        # Schedule flush as background task outside the lock
+        if should_flush:
+            self._schedule_flush()
     
     async def add_conversion(
         self,
@@ -76,6 +93,7 @@ class StatisticsBuffer:
         error_message: Optional[str] = None,
     ):
         """Add conversion statistic to buffer"""
+        should_flush = False
         async with self._lock:
             self.conversion_buffer.append({
                 "id": str(uuid4()),
@@ -88,53 +106,86 @@ class StatisticsBuffer:
                 "error_message": error_message,
                 "date": datetime.utcnow(),
             })
-            await self._check_flush()
-    
-    async def _check_flush(self):
-        """Check if buffer should be flushed"""
-        total_size = len(self.message_buffer) + len(self.download_buffer) + len(self.conversion_buffer)
-        time_since_flush = time.time() - self.last_flush
+            # Check flush conditions while holding lock
+            total_size = len(self.message_buffer) + len(self.download_buffer) + len(self.conversion_buffer)
+            time_since_flush = time.time() - self.last_flush
+            should_flush = (total_size >= self.max_size or time_since_flush >= self.flush_interval) and not self._flushing
         
-        if total_size >= self.max_size or time_since_flush >= self.flush_interval:
-            await self.flush()
+        # Schedule flush as background task outside the lock
+        if should_flush:
+            self._schedule_flush()
     
-    async def flush(self):
-        """Flush all buffers to database"""
-        async with self._lock:
-            if not (self.message_buffer or self.download_buffer or self.conversion_buffer):
-                return
+    def _schedule_flush(self):
+        """Schedule flush as background task if not already flushing"""
+        if self._flushing:
+            return
+        
+        # Cancel existing flush task if it exists and is not done
+        if self._flush_task and not self._flush_task.done():
+            return
+        
+        # Create new flush task
+        self._flush_task = asyncio.create_task(self.flush())
+    
+    async def flush(self, wait_for_existing: bool = False):
+        """Flush all buffers to database (runs as background task)
+        
+        Args:
+            wait_for_existing: If True and a flush is already running, wait for it to complete.
+                              Used for shutdown scenarios.
+        """
+        # If flush is already running, wait for it or return
+        if self._flushing:
+            if wait_for_existing and self._flush_task:
+                try:
+                    await self._flush_task
+                except Exception as e:
+                    logger.debug(f"Existing flush task completed with error: {e}")
+            return
+        
+        self._flushing = True
+        
+        try:
+            # Copy buffers while holding lock (quick operation)
+            async with self._lock:
+                if not (self.message_buffer or self.download_buffer or self.conversion_buffer):
+                    return
+                
+                # Copy buffers for processing outside lock
+                message_data = self.message_buffer.copy()
+                download_data = self.download_buffer.copy()
+                conversion_data = self.conversion_buffer.copy()
+                
+                # Clear buffers immediately
+                self.message_buffer.clear()
+                self.download_buffer.clear()
+                self.conversion_buffer.clear()
             
+            # Perform database operations outside the lock
             try:
                 with database.get_session() as session:
                     # Bulk insert messages
-                    if self.message_buffer:
-                        session.bulk_insert_mappings(MessageStatistic, self.message_buffer)
-                        count = len(self.message_buffer)
-                        self.message_buffer.clear()
-                        logger.debug(f"Bulk inserted {count} message statistics")
+                    if message_data:
+                        session.bulk_insert_mappings(MessageStatistic, message_data)
+                        logger.debug(f"Bulk inserted {len(message_data)} message statistics")
                     
                     # Bulk insert downloads
-                    if self.download_buffer:
-                        session.bulk_insert_mappings(DownloadStatistic, self.download_buffer)
-                        count = len(self.download_buffer)
-                        self.download_buffer.clear()
-                        logger.debug(f"Bulk inserted {count} download statistics")
+                    if download_data:
+                        session.bulk_insert_mappings(DownloadStatistic, download_data)
+                        logger.debug(f"Bulk inserted {len(download_data)} download statistics")
                     
                     # Bulk insert conversions
-                    if self.conversion_buffer:
-                        session.bulk_insert_mappings(ConversionStatistic, self.conversion_buffer)
-                        count = len(self.conversion_buffer)
-                        self.conversion_buffer.clear()
-                        logger.debug(f"Bulk inserted {count} conversion statistics")
+                    if conversion_data:
+                        session.bulk_insert_mappings(ConversionStatistic, conversion_data)
+                        logger.debug(f"Bulk inserted {len(conversion_data)} conversion statistics")
                     
                     session.commit()
                     self.last_flush = time.time()
             except Exception as e:
                 logger.error(f"Failed to flush statistics buffer: {e}", exc_info=True)
-                # Clear buffers on error to prevent memory buildup
-                self.message_buffer.clear()
-                self.download_buffer.clear()
-                self.conversion_buffer.clear()
+                # Note: Buffers already cleared, so no need to clear again
+        finally:
+            self._flushing = False
 
 
 class StatisticsService:

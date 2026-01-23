@@ -205,7 +205,7 @@ async def shutdown_event():
     # Flush statistics buffer before shutdown
     try:
         from app.services.statistics_service import statistics_service
-        await statistics_service.buffer.flush()
+        await statistics_service.buffer.flush(wait_for_existing=True)
         logger.debug("✅ Statistics buffer flushed on shutdown")
     except Exception as e:
         logger.error(f"Error flushing statistics buffer: {e}")
