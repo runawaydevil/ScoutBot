@@ -3,6 +3,7 @@
 from typing import Dict, Any, Optional
 from sqlmodel import SQLModel, create_engine, Session, select
 from sqlalchemy.engine import Engine
+from sqlalchemy import text
 import os
 
 from app.config import settings
@@ -145,6 +146,15 @@ class DatabaseService:
             # Create tables
             SQLModel.metadata.create_all(self.engine)
 
+            # Verify database integrity before migration
+            self._verify_database_integrity()
+
+            # Migrate usersettings table if needed
+            self._migrate_usersettings_table()
+
+            # Verify database integrity after migration
+            self._verify_database_integrity()
+
             # Apply PRAGMA settings after table creation
             with self.engine.connect() as conn:
                 conn.exec_driver_sql("PRAGMA journal_mode=WAL")
@@ -158,6 +168,153 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
+
+    def _migrate_usersettings_table(self):
+        """Migrate usersettings table to add missing columns if needed"""
+        if not self.engine:
+            return
+        
+        try:
+            with self.engine.connect() as conn:
+                # Check if usersettings table exists and get its columns
+                result = conn.execute(text("PRAGMA table_info(usersettings)"))
+                table_info = list(result)
+                existing_columns = {row[1] for row in table_info}  # row[1] is the column name
+                
+                # If table doesn't exist, create_all() will handle it, so skip migration
+                if not existing_columns:
+                    logger.debug("usersettings table does not exist, skipping migration")
+                    return
+                
+                # Define columns that should exist with their SQL definitions and expected defaults
+                required_columns = {
+                    "storage_preference": ("TEXT", "'auto'", "auto"),
+                    "pentaract_auto_upload": ("INTEGER", "1", True),
+                    "pentaract_notify_uploads": ("INTEGER", "1", True),
+                }
+                
+                # Add missing columns
+                columns_added = []
+                for column_name, (column_type, default_value, expected_default) in required_columns.items():
+                    if column_name not in existing_columns:
+                        try:
+                            alter_sql = f"ALTER TABLE usersettings ADD COLUMN {column_name} {column_type} DEFAULT {default_value}"
+                            conn.execute(text(alter_sql))
+                            conn.commit()
+                            columns_added.append(column_name)
+                            logger.info(f"Added column '{column_name}' to usersettings table")
+                        except Exception as e:
+                            # Column might already exist (race condition) or other error
+                            logger.warning(f"Failed to add column '{column_name}': {e}")
+                            conn.rollback()
+                
+                # Post-migration validation: verify columns were added correctly
+                if columns_added:
+                    result_after = conn.execute(text("PRAGMA table_info(usersettings)"))
+                    columns_after = {row[1] for row in result_after}
+                    
+                    # Verify all required columns now exist
+                    missing_after_migration = []
+                    for column_name in required_columns.keys():
+                        if column_name not in columns_after:
+                            missing_after_migration.append(column_name)
+                    
+                    if missing_after_migration:
+                        logger.error(
+                            f"Migration validation failed: columns still missing after migration: {missing_after_migration}"
+                        )
+                    else:
+                        logger.info(
+                            f"Migration validation successful: all {len(columns_added)} column(s) verified"
+                        )
+                    
+                    # Validate default values in existing records (if any exist)
+                    try:
+                        count_result = conn.execute(text("SELECT COUNT(*) FROM usersettings"))
+                        record_count = count_result.scalar()
+                        if record_count and record_count > 0:
+                            # Check a sample record to ensure defaults were applied
+                            sample_result = conn.execute(
+                                text("SELECT storage_preference, pentaract_auto_upload, pentaract_notify_uploads FROM usersettings LIMIT 1")
+                            )
+                            sample = sample_result.fetchone()
+                            if sample:
+                                logger.debug(
+                                    f"Sample record validation: storage_preference={sample[0]}, "
+                                    f"pentaract_auto_upload={sample[1]}, pentaract_notify_uploads={sample[2]}"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Could not validate default values in existing records: {e}")
+                    
+                    logger.info(f"Migration completed: added {len(columns_added)} column(s) to usersettings table")
+                else:
+                    logger.debug("usersettings table migration: all required columns already exist")
+                    
+        except Exception as e:
+            # Don't fail initialization if migration fails, but log the error with full context
+            logger.error(f"Failed to migrate usersettings table: {e}", exc_info=True)
+            # Continue with initialization
+
+    def _verify_database_integrity(self):
+        """Verify database integrity and structure"""
+        if not self.engine:
+            return
+        
+        try:
+            with self.engine.connect() as conn:
+                # Check if database file is accessible
+                database_url = str(self.engine.url)
+                if database_url.startswith("sqlite:///"):
+                    db_path = database_url.replace("sqlite:///", "")
+                    if os.path.exists(db_path):
+                        db_size = os.path.getsize(db_path)
+                        logger.debug(f"Database file exists: {db_path} ({db_size} bytes)")
+                    else:
+                        logger.debug(f"Database file will be created: {db_path}")
+                
+                # Run SQLite integrity check
+                integrity_result = conn.execute(text("PRAGMA integrity_check"))
+                integrity_status = integrity_result.scalar()
+                
+                if integrity_status == "ok":
+                    logger.debug("Database integrity check passed")
+                else:
+                    logger.warning(f"Database integrity check returned: {integrity_status}")
+                
+                # Verify critical tables exist
+                tables_result = conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                )
+                existing_tables = {row[0] for row in tables_result}
+                
+                critical_tables = ["usersettings", "feeds", "chats", "botstate", "botsettings"]
+                missing_tables = [table for table in critical_tables if table not in existing_tables]
+                
+                if missing_tables:
+                    logger.debug(f"Some critical tables don't exist yet (will be created): {missing_tables}")
+                else:
+                    logger.debug(f"All critical tables exist: {existing_tables}")
+                
+                # Verify usersettings table structure if it exists
+                if "usersettings" in existing_tables:
+                    result = conn.execute(text("PRAGMA table_info(usersettings)"))
+                    columns = {row[1] for row in result}
+                    
+                    required_columns = {
+                        "storage_preference",
+                        "pentaract_auto_upload",
+                        "pentaract_notify_uploads",
+                    }
+                    
+                    missing_columns = required_columns - columns
+                    if missing_columns:
+                        logger.debug(f"usersettings table missing columns (will be migrated): {missing_columns}")
+                    else:
+                        logger.debug("usersettings table structure is complete")
+                        
+        except Exception as e:
+            # Log but don't fail initialization if integrity check fails
+            logger.warning(f"Database integrity check encountered an issue: {e}")
 
     def get_session(self) -> Session:
         """Get database session"""

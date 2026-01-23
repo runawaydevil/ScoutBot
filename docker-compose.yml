@@ -247,14 +247,126 @@ networks:
     name: scoutbot_network
     driver: bridge
 
-# IMPORTANT: Database persistence is now properly configured!
+# ============================================================================
+# DATA PERSISTENCE AND VOLUME MANAGEMENT
+# ============================================================================
 #
-# For clean deployment (removes all data):
-# docker-compose down -v && docker-compose up -d --build
+# IMPORTANT: All data is persisted in Docker named volumes that survive
+# container rebuilds, restarts, and removals. Your data is SAFE when using
+# normal deployment commands.
 #
-# For updates preserving data (RECOMMENDED):
-# docker-compose up -d --build
+# ----------------------------------------------------------------------------
+# VOLUMES EXPLANATION
+# ----------------------------------------------------------------------------
 #
-# The database will persist between container restarts thanks to:
-# - Volume mount: app_data:/app/data
-# - Backup mount: backups_data:/app/backups
+# The following volumes are used to persist data:
+#
+# 1. app_data:/app/data
+#    - Stores the SQLite database (production.db)
+#    - Contains all application data (feeds, chats, user settings, etc.)
+#    - CRITICAL: This volume contains your database - never remove it!
+#
+# 2. backups_data:/app/backups
+#    - Stores automatic and manual backups
+#    - Used for backup/restore operations
+#
+# 3. tmp_data:/tmp
+#    - Temporary files for downloads and processing
+#    - Can be safely cleared, but persists between restarts for efficiency
+#
+# 4. redis_data:/data
+#    - Redis persistent data (AOF files)
+#    - Contains cached data and job queue state
+#
+# 5. telegram-bot-api-data:/var/lib/telegram-bot-api
+#    - Telegram Bot API server data
+#    - Downloaded files and session data
+#
+# 6. pentaract_data:/data
+#    - Pentaract storage service data
+#    - Uploaded files and metadata
+#
+# ----------------------------------------------------------------------------
+# DEPLOYMENT COMMANDS
+# ----------------------------------------------------------------------------
+#
+# SAFE - Updates preserving all data (RECOMMENDED):
+#   docker compose up -d --build
+#
+#   This command:
+#   - Rebuilds containers with latest code
+#   - Preserves ALL volumes and data
+#   - Applies database migrations automatically
+#   - Your data is 100% safe
+#
+# DANGEROUS - Removes ALL data (use with caution!):
+#   docker-compose down -v && docker-compose up -d --build
+#
+#   This command:
+#   - Removes all volumes (-v flag)
+#   - Deletes ALL databases and data
+#   - Creates fresh empty database
+#   - ONLY use when you want to start completely fresh
+#
+# ----------------------------------------------------------------------------
+# BACKUP AND RESTORE
+# ----------------------------------------------------------------------------
+#
+# Manual backup (recommended before major updates):
+#   docker exec scoutbot python -c "from app.database import database; import shutil; shutil.copy('/app/data/production.db', '/app/backups/production.db.backup')"
+#
+# List volumes:
+#   docker volume ls | grep scoutbot
+#
+# Inspect volume location:
+#   docker volume inspect scoutbot_app_data
+#
+# Backup entire volume (advanced):
+#   docker run --rm -v scoutbot_app_data:/data -v $(pwd):/backup alpine tar czf /backup/app_data_backup.tar.gz /data
+#
+# Restore volume (advanced):
+#   docker run --rm -v scoutbot_app_data:/data -v $(pwd):/backup alpine tar xzf /backup/app_data_backup.tar.gz -C /data
+#
+# ----------------------------------------------------------------------------
+# VERIFICATION
+# ----------------------------------------------------------------------------
+#
+# Verify data persistence after rebuild:
+#   docker exec scoutbot ls -lh /app/data/
+#   docker exec scoutbot sqlite3 /app/data/production.db "SELECT COUNT(*) FROM usersettings;"
+#
+# Check volume usage:
+#   docker system df -v | grep scoutbot
+#
+# ----------------------------------------------------------------------------
+# MIGRATION SAFETY
+# ----------------------------------------------------------------------------
+#
+# Database migrations are automatically applied on startup:
+# - Migrations are validated before and after execution
+# - Database integrity is checked automatically
+# - Failed migrations are logged but don't break startup
+# - All migrations are idempotent (safe to run multiple times)
+#
+# The migration system will:
+# - Detect missing columns in existing tables
+# - Add missing columns with appropriate defaults
+# - Validate that migrations succeeded
+# - Preserve all existing data
+#
+# ----------------------------------------------------------------------------
+# TROUBLESHOOTING
+# ----------------------------------------------------------------------------
+#
+# If you suspect data loss:
+# 1. Check volume exists: docker volume ls | grep scoutbot
+# 2. Verify database file: docker exec scoutbot ls -lh /app/data/production.db
+# 3. Check logs: docker logs scoutbot | grep -i "migration\|integrity\|database"
+# 4. Inspect volume: docker volume inspect scoutbot_app_data
+#
+# If database seems corrupted:
+# 1. Check integrity: docker exec scoutbot sqlite3 /app/data/production.db "PRAGMA integrity_check;"
+# 2. Review migration logs: docker logs scoutbot | grep -i migration
+# 3. Restore from backup if available
+#
+# ============================================================================
