@@ -79,56 +79,6 @@ class FeedService:
                     "error": "Invalid feed URL or feed is not accessible. Try providing the direct RSS feed URL.",
                 }
 
-    async def add_feed(self, chat_id: str, name: str, url: str) -> Dict[str, Any]:
-        """Add a new feed"""
-        try:
-            feed_url = url
-
-            # Convert YouTube URLs to RSS format BEFORE validation
-            from app.services.youtube_service import youtube_service
-
-            if youtube_service.is_youtube_url(url):
-                rss_url = youtube_service.convert_to_rss_url(url)
-                if rss_url:
-                    feed_url = rss_url
-                    logger.info(f"Converting YouTube URL to RSS: {url} -> {feed_url}")
-                else:
-                    return {
-                        "success": False,
-                        "error": "Could not convert YouTube URL to RSS feed",
-                    }
-
-            # Convert Reddit URLs to RSS format BEFORE validation
-            if feed_url == url:  # Only check Reddit if not already converted
-                from app.services.reddit_service import reddit_service
-
-                if reddit_service.is_reddit_url(url):
-                    # Convert to RSS URL if not already in RSS format
-                    if not url.endswith(".rss") and not url.endswith(".xml"):
-                        if "/r/" in url:
-                            subreddit = url.split("/r/")[1].split("/")[0]
-                            feed_url = f"https://www.reddit.com/r/{subreddit}/.rss"
-                            logger.info(f"Converting Reddit URL to RSS: {url} -> {feed_url}")
-                        else:
-                            feed_url = f"{url}.rss"
-
-            # Try automatic feed detection if URL doesn't look like a feed
-            if not feed_url.endswith((".rss", ".xml", ".json", "/feed", "/rss", "/atom")):
-                from app.services.feed_detector import feed_detector
-
-                detected_feeds = await feed_detector.detect_from_page(feed_url)
-                if detected_feeds:
-                    # Use first detected feed (preferred: RSS > Atom > JSON)
-                    feed_url = detected_feeds[0].url
-
-            # Validate feed URL (use converted URL for YouTube/Reddit)
-            is_valid = await rss_service.validate_feed_url(feed_url)
-            if not is_valid:
-                return {
-                    "success": False,
-                    "error": "Invalid feed URL or feed is not accessible. Try providing the direct RSS feed URL.",
-                }
-
             with database.get_session() as session:
                 # Check if feed already exists (optimized: query directly in same session)
                 existing = session.exec(
@@ -139,44 +89,6 @@ class FeedService:
                         "success": False,
                         "error": f"Feed '{name}' already exists",
                     }
-
-                # Ensure chat exists
-                chat = session.exec(select(Chat).where(Chat.id == chat_id)).first()
-                if not chat:
-                    chat = Chat(
-                        id=chat_id,
-                        type="private",  # Default, will be updated if needed
-                        title=None,
-                    )
-                    session.add(chat)
-                    session.commit()
-                    session.refresh(chat)
-
-                # Use the feed_url (already converted for Reddit if needed)
-                rss_url = feed_url
-
-                # Create feed
-                feed = Feed(
-                    id=str(uuid4()),
-                    chat_id=chat_id,
-                    name=name,
-                    url=url,  # Keep original URL for display
-                    rss_url=rss_url,  # Use converted RSS URL for fetching
-                    check_interval_minutes=10,
-                    max_age_minutes=1440,  # 24 hours
-                    enabled=True,
-                    failures=0,
-                )
-                session.add(feed)
-                session.commit()
-                session.refresh(feed)
-
-                logger.info(f"Feed added: {chat_id}/{name}")
-                return {"success": True, "feed": feed}
-
-        except Exception as e:
-            logger.error(f"Failed to add feed: {e}")
-            return {"success": False, "error": str(e)}
 
                 # Ensure chat exists
                 chat = session.exec(select(Chat).where(Chat.id == chat_id)).first()
