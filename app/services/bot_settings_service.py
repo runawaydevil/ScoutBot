@@ -39,15 +39,6 @@ class BotSettingsService:
             if parsed is None:
                 return None
             return str(parsed)
-    
-    # Keep private methods for backward compatibility (deprecated)
-    def _serialize_value(self, value: Any, value_type: str) -> str:
-        """Serialize value to JSON string (deprecated, use serialize_value)"""
-        return self.serialize_value(value, value_type)
-
-    def _deserialize_value(self, value: str, value_type: str) -> Any:
-        """Deserialize value from JSON string (deprecated, use deserialize_value)"""
-        return self.deserialize_value(value, value_type)
 
     async def get_setting(self, key: str) -> Optional[BotSettings]:
         """Get a setting by key"""

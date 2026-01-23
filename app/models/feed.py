@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Index
 
 
 class ChatBase(SQLModel):
@@ -79,6 +80,10 @@ class Feed(FeedBase, table=True):
     """Feed model"""
 
     __tablename__ = "feed"
+    __table_args__ = (
+        Index("idx_feed_chat_enabled", "chat_id", "enabled"),
+        Index("idx_feed_enabled_check", "enabled", "last_check"),
+    )
 
     id: str = Field(primary_key=True)
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow, alias="createdAt")

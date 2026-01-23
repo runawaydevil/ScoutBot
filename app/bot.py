@@ -311,7 +311,7 @@ ScoutBot v0.4 by runawaydevil
                     InlineKeyboardButton(text="More commands →", callback_data="help_page_2")
                 ]]
             )
-            await message.answer(help_text_page1, reply_markup=markup)
+            await message.answer(help_text_page1, reply_markup=markup, parse_mode="HTML")
 
         # Help callback for pagination
         @self.dp.callback_query(lambda c: c.data and c.data.startswith("help_page_"))
@@ -327,7 +327,7 @@ ScoutBot v0.4 by runawaydevil
 ScoutBot v0.03 - Help (Page 2)
 
 <b>Video Download:</b>
-/download - Download from supported sites
+/download - Download from supported sites (sends via Telegram)
 /settings - Configure all bot settings
 
 <b>Media Tools:</b>
@@ -347,10 +347,36 @@ ScoutBot v0.03 - Help (Page 2)
 """
                     markup = InlineKeyboardMarkup(
                         inline_keyboard=[[
-                            InlineKeyboardButton(text="← Back", callback_data="help_page_1")
+                            InlineKeyboardButton(text="← Back", callback_data="help_page_1"),
+                            InlineKeyboardButton(text="Storage →", callback_data="help_page_3")
                         ]]
                     )
-                    await callback_query.message.edit_text(help_text_page2, reply_markup=markup)
+                    await callback_query.message.edit_text(help_text_page2, reply_markup=markup, parse_mode="HTML")
+                elif page == "3":
+                    # Page 3: Storage (Pentaract) commands
+                    help_text_page3 = """
+ScoutBot v0.03 - Help (Page 3)
+
+<b>Storage (Pentaract) - Separate Service:</b>
+/storage - Show storage help
+/storage upload &lt;url&gt; - Download and upload to Pentaract
+/storage list - List all files
+/storage download &lt;code&gt; - Download file by code
+/storage delete &lt;code&gt; - Delete file by code
+/storage stats - Show storage statistics
+/storage info &lt;code&gt; - Show file information
+
+<b>Note:</b>
+Storage is a separate service from downloads.
+• /download sends files via Telegram
+• /storage uploads to Pentaract cloud storage
+"""
+                    markup = InlineKeyboardMarkup(
+                        inline_keyboard=[[
+                            InlineKeyboardButton(text="← Back", callback_data="help_page_2")
+                        ]]
+                    )
+                    await callback_query.message.edit_text(help_text_page3, reply_markup=markup)
                 else:
                     # Page 1
                     help_text_page1 = """
@@ -378,7 +404,7 @@ ScoutBot v0.4 by runawaydevil
                             InlineKeyboardButton(text="More commands →", callback_data="help_page_2")
                         ]]
                     )
-                    await callback_query.message.edit_text(help_text_page1, reply_markup=markup)
+                    await callback_query.message.edit_text(help_text_page1, reply_markup=markup, parse_mode="HTML")
                 
                 await callback_query.answer()
             except Exception as e:
@@ -436,8 +462,9 @@ ScoutBot v0.4 by runawaydevil
             BotCommand(command="enable", description="Enable a feed"),
             BotCommand(command="disable", description="Disable a feed"),
             BotCommand(command="health", description="Check feed health status"),
-            BotCommand(command="download", description="Download video/audio from supported sites (YouTube, Spotify, Instagram, Pixeldrain, KrakenFiles, direct URLs)"),
+            BotCommand(command="download", description="Download video/audio from supported sites (sends via Telegram)"),
             BotCommand(command="settings", description="Configure download quality and format"),
+            BotCommand(command="storage", description="Manage Pentaract cloud storage (separate from downloads)"),
             BotCommand(command="stats", description="Show bot statistics"),
             BotCommand(command="blockstats", description="Show anti-blocking system statistics"),
         ]

@@ -129,6 +129,10 @@ class DatabaseService:
                     conn.exec_driver_sql("PRAGMA temp_store=MEMORY")
                     # Enable memory-mapped I/O (256MB)
                     conn.exec_driver_sql("PRAGMA mmap_size=268435456")
+                    # Set journal size limit to 64MB (prevents WAL file from growing too large)
+                    conn.exec_driver_sql("PRAGMA journal_size_limit=67108864")
+                    # Set busy timeout to 30 seconds (helps with concurrent access)
+                    conn.exec_driver_sql("PRAGMA busy_timeout=30000")
                     # Optimize for performance
                     conn.exec_driver_sql("PRAGMA optimize")
                     conn.commit()
@@ -162,6 +166,8 @@ class DatabaseService:
                 conn.exec_driver_sql("PRAGMA cache_size=-64000")
                 conn.exec_driver_sql("PRAGMA temp_store=MEMORY")
                 conn.exec_driver_sql("PRAGMA mmap_size=268435456")
+                conn.exec_driver_sql("PRAGMA journal_size_limit=67108864")
+                conn.exec_driver_sql("PRAGMA busy_timeout=30000")
                 conn.commit()
 
             logger.debug("Database initialized successfully with WAL mode and optimizations")
@@ -334,35 +340,37 @@ class DatabaseService:
             return False
 
     async def get_metrics(self) -> Dict[str, Any]:
-        """Get database metrics"""
+        """Get database metrics (optimized with func.count)"""
         try:
             with self.get_session() as session:
-                feed_count = session.exec(select(Feed)).all()
-                chat_count = session.exec(select(Chat)).all()
+                feed_count = session.exec(select(func.count(Feed.id))).first() or 0
+                chat_count = session.exec(select(func.count(Chat.id))).first() or 0
 
                 return {
-                    "database_feed_count": len(feed_count),
-                    "database_chat_count": len(chat_count),
+                    "database_feed_count": feed_count,
+                    "database_chat_count": chat_count,
                 }
         except Exception as e:
             logger.error(f"Failed to get database metrics: {e}")
             return {}
 
     async def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
+        """Get database statistics (optimized with func.count)"""
         try:
             with self.get_session() as session:
-                feeds = session.exec(select(Feed)).all()
-                chats = session.exec(select(Chat)).all()
-                enabled_feeds = [f for f in feeds if f.enabled]
-                disabled_feeds = [f for f in feeds if not f.enabled]
+                total_feeds = session.exec(select(func.count(Feed.id))).first() or 0
+                enabled_feeds = session.exec(
+                    select(func.count(Feed.id)).where(Feed.enabled == True)
+                ).first() or 0
+                disabled_feeds = total_feeds - enabled_feeds
+                total_chats = session.exec(select(func.count(Chat.id))).first() or 0
 
                 return {
                     "database": {
-                        "total_feeds": len(feeds),
-                        "enabled_feeds": len(enabled_feeds),
-                        "disabled_feeds": len(disabled_feeds),
-                        "total_chats": len(chats),
+                        "total_feeds": total_feeds,
+                        "enabled_feeds": enabled_feeds,
+                        "disabled_feeds": disabled_feeds,
+                        "total_chats": total_chats,
                     }
                 }
         except Exception as e:

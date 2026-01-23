@@ -53,15 +53,17 @@ async def storage_command(message: Message):
     if not args:
         # Show brief help
         help_text = (
-            "📦 <b>Storage</b>\n\n"
-            "<b>Upload:</b> Send /storage with a file attached\n\n"
+            "📦 <b>Storage (Pentaract)</b>\n\n"
+            "<b>Upload:</b>\n"
+            "• Send /storage with a file attached\n"
+            "• <code>/storage upload &lt;url&gt;</code> - Download and upload from URL\n\n"
             "<b>Commands:</b>\n"
-            "• <code>/storage list</code>\n"
-            "• <code>/storage download &lt;code&gt;</code>\n"
-            "• <code>/storage delete &lt;code&gt;</code>\n"
-            "• <code>/storage stats</code>\n"
-            "• <code>/storage info &lt;code&gt;</code>\n\n"
-            "Use <code>/help storage</code> for more info"
+            "• <code>/storage list</code> - List all files\n"
+            "• <code>/storage download &lt;code&gt;</code> - Download file by code\n"
+            "• <code>/storage delete &lt;code&gt;</code> - Delete file by code\n"
+            "• <code>/storage stats</code> - Show statistics\n"
+            "• <code>/storage info &lt;code&gt;</code> - Show file information\n\n"
+            "<i>Storage is a separate service from downloads. Use /download for Telegram uploads.</i>"
         )
         await message.reply(help_text, parse_mode="HTML")
         return
@@ -69,7 +71,13 @@ async def storage_command(message: Message):
     # Route to appropriate subcommand
     subcommand = args[0].lower()
     
-    if subcommand == "list":
+    if subcommand == "upload":
+        if len(args) < 2:
+            await message.reply("❌ Specify a URL: <code>/storage upload &lt;url&gt;</code>", parse_mode="HTML")
+            return
+        url = " ".join(args[1:])  # URL might contain spaces
+        await storage_upload_url(message, url)
+    elif subcommand == "list":
         await storage_list(message)
     elif subcommand == "download":
         if len(args) < 2:
@@ -95,6 +103,119 @@ async def storage_command(message: Message):
         await storage_cleanall(message)
     else:
         await message.reply(f"❌ Unknown: {subcommand}", parse_mode="HTML")
+
+
+async def storage_upload_url(message: Message, url: str):
+    """Download from URL and upload directly to Pentaract storage"""
+    import re
+    
+    # Validate URL
+    if not url or not re.findall(r"^https?://", url.lower()):
+        await message.reply(
+            "❌ <b>Invalid URL.</b>\n\n"
+            "Usage: /storage upload &lt;url&gt;\n\n"
+            "Supported sites:\n"
+            "• YouTube\n"
+            "• Spotify\n"
+            "• Instagram\n"
+            "• Direct file URLs",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Check if Pentaract is enabled
+    if not settings.pentaract_enabled:
+        await message.reply("❌ Pentaract storage is not enabled.")
+        return
+    
+    # Check if service is available
+    if not await pentaract_storage.is_available():
+        await message.reply("❌ Pentaract storage is currently unavailable.")
+        return
+    
+    user_id = str(message.from_user.id)
+    allowed_user_id = str(settings.allowed_user_id) if settings.allowed_user_id else None
+    
+    if allowed_user_id and user_id != allowed_user_id:
+        await message.reply("❌ Unauthorized")
+        return
+    
+    bot_msg = await message.reply("📥 Downloading from URL...")
+    
+    try:
+        # Detect downloader type and create appropriate downloader
+        from app.utils.download_utils import detect_downloader_type
+        from app.downloaders import YoutubeDownload, DirectDownload, InstagramDownload, SpotifyDownload
+        
+        downloader_type = detect_downloader_type(url)
+        
+        if downloader_type == "youtube":
+            downloader = YoutubeDownload(message.bot, bot_msg, url)
+        elif downloader_type == "spotify":
+            if not settings.spotify_enabled:
+                await bot_msg.edit_text("❌ Spotify downloads are disabled")
+                return
+            downloader = SpotifyDownload(message.bot, bot_msg, url)
+        elif downloader_type == "instagram":
+            downloader = InstagramDownload(message.bot, bot_msg, url)
+        else:  # direct
+            downloader = DirectDownload(message.bot, bot_msg, url)
+        
+        # Download the file
+        await downloader._load_user_settings()
+        files = await downloader._download()
+        
+        if not files:
+            await bot_msg.edit_text("❌ No files downloaded")
+            return
+        
+        # Filter files
+        files = downloader._filter_downloaded_files(files)
+        
+        if not files:
+            await bot_msg.edit_text("❌ No valid files to upload")
+            return
+        
+        # Upload first file to Pentaract
+        file_path = files[0]
+        result = await downloader._upload_to_pentaract(file_path)
+        
+        if result.get("success"):
+            # Get file code from upload record
+            from app.database import database
+            from app.models.pentaract_upload import PentaractUpload
+            from sqlmodel import select
+            
+            file_code = "N/A"
+            try:
+                with database.get_session() as session:
+                    statement = select(PentaractUpload).where(
+                        PentaractUpload.user_id == user_id,
+                        PentaractUpload.remote_path == result.get("remote_path")
+                    ).order_by(PentaractUpload.created_at.desc())
+                    upload_record = session.exec(statement).first()
+                    if upload_record:
+                        file_code = upload_record.file_code
+            except Exception as e:
+                logger.debug(f"Could not retrieve file code: {e}")
+            
+            await bot_msg.edit_text(
+                f"✅ Uploaded to Pentaract storage!\n\n"
+                f"📁 {file_path.name}\n"
+                f"📊 {sizeof_fmt(file_path.stat().st_size)}\n"
+                f"🔖 Code: <code>{file_code}</code>\n\n"
+                f"Use <code>/storage download {file_code}</code> to download",
+                parse_mode="HTML"
+            )
+        else:
+            await bot_msg.edit_text("❌ Upload failed")
+            
+    except Exception as e:
+        logger.error(f"Error uploading from URL: {e}", exc_info=True)
+        error_msg = str(e)
+        if len(error_msg) > 500:
+            error_msg = error_msg[:500] + "..."
+        await bot_msg.edit_text(f"❌ Upload failed: {error_msg}")
 
 
 async def handle_storage_upload(message: Message):

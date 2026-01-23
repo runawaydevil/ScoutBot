@@ -202,6 +202,14 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     logger.debug("Shutting down ScoutBot application")
 
+    # Flush statistics buffer before shutdown
+    try:
+        from app.services.statistics_service import statistics_service
+        await statistics_service.buffer.flush()
+        logger.debug("✅ Statistics buffer flushed on shutdown")
+    except Exception as e:
+        logger.error(f"Error flushing statistics buffer: {e}")
+
     # Stop Pentaract services
     if settings.pentaract_enabled:
         try:

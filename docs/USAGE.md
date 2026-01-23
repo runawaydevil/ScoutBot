@@ -35,6 +35,8 @@ Examples:
 ```
 Supports: YouTube, Spotify (tracks/playlists/albums/artists), most yt-dlp sites
 
+**Note:** Downloads are sent via Telegram. For cloud storage, use `/storage upload` instead.
+
 **Direct download:**
 ```
 /direct <url>
@@ -80,25 +82,30 @@ All media commands return ZIP files.
 - YouTube, Spotify, Instagram, Pixeldrain, KrakenFiles
 - Direct file URLs
 
-## Pentaract Storage (Optional)
+## Pentaract Storage (Separate Service)
 
-If Pentaract storage is enabled, manage your cloud-stored files:
+**IMPORTANT:** Pentaract Storage is a completely separate service from downloads. Commands do not mix.
+
+**Upload files:**
+```
+/storage upload <url>  - Download from URL and upload to Pentaract
+/storage               - Upload file (attach file to message)
+```
 
 **List files:**
 ```
 /storage list
-/storage list downloads/youtube
 ```
 
 **Download file:**
 ```
-/storage download video.mp4
-/storage download downloads/youtube/video.mp4
+/storage download <code>
 ```
+Use the file code shown when uploading or listing files.
 
 **Delete file:**
 ```
-/storage delete video.mp4
+/storage delete <code>
 ```
 Requires confirmation before deletion.
 
@@ -110,18 +117,14 @@ Shows total files, storage used, upload statistics, and success rate.
 
 **File information:**
 ```
-/storage info video.mp4
+/storage info <code>
 ```
 Shows file name, size, type, and upload date.
 
-**Storage Preferences:**
-Configure via `/settings`:
-- **Auto** - Files larger than threshold (default: 50MB) upload to Pentaract
-- **Pentaract** - All files upload to Pentaract (unlimited storage)
-- **Local** - All files use local Telegram storage (50MB limit per file)
-
-**Fallback Strategy:**
-If Pentaract is unavailable, files automatically fallback to local Telegram storage. You'll be notified when fallback occurs.
+**Key Differences:**
+- `/download` - Downloads and sends files via Telegram
+- `/storage upload` - Downloads and uploads to Pentaract cloud storage (separate service)
+- Storage commands are completely independent and do not interfere with download commands
 
 ## File Naming
 
@@ -157,8 +160,8 @@ Paste any URL in chat - bot automatically detects and offers action buttons (Dow
 /convert png (with image attached)
 
 # Pentaract Storage (if enabled)
+/storage upload https://youtube.com/watch?v=...
 /storage list
-/storage download video.mp4
+/storage download ABC123
 /storage stats
-/settings  # Configure storage preference
 ```

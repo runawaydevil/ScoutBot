@@ -1,7 +1,7 @@
 """User settings model for download preferences"""
 
 from typing import Optional
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from datetime import datetime
 
 

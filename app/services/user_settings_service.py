@@ -1,9 +1,11 @@
 """User settings service for managing download preferences"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from uuid import uuid4
 from sqlmodel import select
+import asyncio
+import time
 
 from app.database import database
 from app.models.user_settings import UserSettings
@@ -18,10 +20,49 @@ VALID_STORAGE_PREFERENCES = ["auto", "pentaract", "local"]
 
 
 class UserSettingsService:
-    """Service for managing user download settings"""
+    """Service for managing user download settings with in-memory cache"""
+
+    def __init__(self):
+        # In-memory cache: user_id -> (settings, timestamp)
+        self._cache: Dict[str, tuple] = {}
+        self._cache_ttl = 300  # 5 minutes
+        self._cache_lock = asyncio.Lock()
+
+    def _is_cache_valid(self, timestamp: float) -> bool:
+        """Check if cache entry is still valid"""
+        return (time.time() - timestamp) < self._cache_ttl
+
+    async def _get_from_cache(self, user_id: str) -> Optional[UserSettings]:
+        """Get settings from cache if valid"""
+        async with self._cache_lock:
+            if user_id in self._cache:
+                settings, timestamp = self._cache[user_id]
+                if self._is_cache_valid(timestamp):
+                    return settings
+                else:
+                    # Remove expired entry
+                    del self._cache[user_id]
+        return None
+
+    async def _set_cache(self, user_id: str, settings: UserSettings):
+        """Store settings in cache"""
+        async with self._cache_lock:
+            self._cache[user_id] = (settings, time.time())
+
+    async def _invalidate_cache(self, user_id: str):
+        """Invalidate cache for a user"""
+        async with self._cache_lock:
+            if user_id in self._cache:
+                del self._cache[user_id]
 
     async def get_settings(self, user_id: str) -> UserSettings:
-        """Get or create user settings"""
+        """Get or create user settings (with cache)"""
+        # Check cache first
+        cached = await self._get_from_cache(user_id)
+        if cached:
+            logger.debug(f"Cache hit for user settings: {user_id}")
+            return cached
+
         with database.get_session() as session:
             statement = select(UserSettings).where(UserSettings.user_id == user_id)
             settings = session.exec(statement).first()
@@ -39,6 +80,8 @@ class UserSettingsService:
                 session.refresh(settings)
                 logger.info(f"Created default settings for user {user_id}")
 
+            # Store in cache
+            await self._set_cache(user_id, settings)
             return settings
 
     async def get_quality(self, user_id: str) -> str:
@@ -64,6 +107,8 @@ class UserSettingsService:
             settings.updated_at = datetime.utcnow()
             session.add(settings)
             session.commit()
+            # Invalidate cache
+            await self._invalidate_cache(user_id)
             logger.info(f"Updated quality for user {user_id}: {quality}")
 
     async def set_format(self, user_id: str, format: str):
@@ -79,6 +124,8 @@ class UserSettingsService:
             settings.updated_at = datetime.utcnow()
             session.add(settings)
             session.commit()
+            # Invalidate cache
+            await self._invalidate_cache(user_id)
             logger.info(f"Updated format for user {user_id}: {format}")
 
     async def get_storage_preference(self, user_id: str) -> str:
@@ -102,6 +149,8 @@ class UserSettingsService:
             settings.updated_at = datetime.utcnow()
             session.add(settings)
             session.commit()
+            # Invalidate cache
+            await self._invalidate_cache(user_id)
             logger.info(f"Updated storage preference for user {user_id}: {preference}")
 
 

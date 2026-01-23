@@ -2,7 +2,6 @@
 
 import asyncio
 import gc
-import hashlib
 import json
 import re
 import shutil
@@ -26,11 +25,6 @@ from app.services.pentaract_storage_service import pentaract_storage
 from app.downloaders.helper import convert_audio_format, get_metadata as helper_get_metadata, get_caption, generate_thumbnail
 
 logger = get_logger(__name__)
-
-# Verify required tools at module level
-FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None
-if not FFMPEG_AVAILABLE:
-    logger.warning("FFmpeg not found in PATH - file splitting will not work")
 
 # Telegram file size limits
 TELEGRAM_VIDEO_MAX_SIZE = 50 * 1024 * 1024  # 50MB for video format
@@ -275,52 +269,6 @@ class BaseDownloader(ABC):
         
         return filtered
 
-    async def _should_use_pentaract(self, file_size: int) -> bool:
-        """
-        Determine if file should be uploaded to Pentaract based on user preference and file size
-        
-        Args:
-            file_size: Size of file in bytes
-            
-        Returns:
-            True if file should be uploaded to Pentaract, False otherwise
-        """
-        # Check if Pentaract is enabled
-        if not settings.pentaract_enabled:
-            logger.debug("Pentaract is disabled in settings")
-            return False
-        
-        # Check if Pentaract service is available
-        if not await pentaract_storage.is_available():
-            logger.warning("Pentaract service is not available")
-            return False
-        
-        # Get user storage preference
-        user_id = str(self._from_user)
-        try:
-            preference = await user_settings_service.get_storage_preference(user_id)
-        except Exception as e:
-            logger.error(f"Failed to get storage preference for user {user_id}: {e}")
-            preference = "auto"
-        
-        # Make decision based on preference
-        if preference == "pentaract":
-            logger.debug(f"User {user_id} prefers Pentaract storage")
-            return True
-        elif preference == "local":
-            logger.debug(f"User {user_id} prefers local (Telegram) storage")
-            return False
-        else:  # "auto"
-            # Use threshold to decide
-            threshold_bytes = settings.pentaract_upload_threshold * 1024 * 1024
-            should_upload = file_size > threshold_bytes
-            logger.debug(
-                f"Auto mode: file size {sizeof_fmt(file_size)} "
-                f"{'exceeds' if should_upload else 'below'} threshold "
-                f"{sizeof_fmt(threshold_bytes)}"
-            )
-            return should_upload
-
     async def _upload_to_pentaract(self, file_path: Path) -> Dict[str, Any]:
         """
         Upload file to Pentaract storage with resource monitoring
@@ -336,7 +284,7 @@ class BaseDownloader(ABC):
         """
         from uuid import uuid4
         from app.models.pentaract_file import PentaractFile
-        from app.models.pentaract_upload import PentaractUpload
+        from app.models.pentaract_upload import PentaractUpload, generate_file_code
         from app.database import database
         from datetime import datetime
         from app.services.resource_monitor_service import resource_monitor
@@ -349,11 +297,16 @@ class BaseDownloader(ABC):
         filename = file_path.name
         file_size = file_path.stat().st_size
         
+        # Generate unique file code before creating record
+        file_code = generate_file_code()
+        
         # Create upload tracking record
         upload_id = str(uuid4())
         upload_record = PentaractUpload(
             id=upload_id,
             user_id=user_id,
+            file_code=file_code,
+            original_filename=filename,
             file_path=str(file_path),
             remote_path="",  # Will be updated after upload
             file_size=file_size,
@@ -488,59 +441,8 @@ class BaseDownloader(ABC):
             
             raise
 
-    async def _handle_pentaract_upload(self, files: List[Path]) -> bool:
-        """
-        Handle upload to Pentaract with fallback to Telegram
-        
-        Args:
-            files: List of files to upload
-            
-        Returns:
-            True if upload was successful (either Pentaract or Telegram fallback)
-        """
-        if not files:
-            return False
-        
-        file_path = files[0]
-        file_size = file_path.stat().st_size
-        
-        # Check if should use Pentaract
-        should_use_pentaract = await self._should_use_pentaract(file_size)
-        
-        if should_use_pentaract:
-            try:
-                # Try Pentaract upload
-                await self._upload_to_pentaract(file_path)
-                
-                # Record successful upload statistic
-                try:
-                    from app.services.statistics_service import statistics_service
-                    chat_id = str(self._chat_id)
-                    downloader_type = self.__class__.__name__.replace("Downloader", "").lower()
-                    await statistics_service.record_download(
-                        downloader_type=downloader_type,
-                        status="success",
-                        chat_id=chat_id,
-                        file_size=file_size,
-                    )
-                except Exception as e:
-                    logger.debug(f"Failed to record download statistic: {e}")
-                
-                return True
-                
-            except Exception as e:
-                # Pentaract upload failed, fallback to Telegram
-                logger.warning(f"Pentaract upload failed, falling back to Telegram: {e}")
-                await self.edit_text(
-                    "⚠️ Pentaract upload failed, sending via Telegram instead..."
-                )
-                # Continue to regular Telegram upload below
-        
-        # Upload to Telegram (either by choice or as fallback)
-        return False  # Indicate that Pentaract upload was not used
-
     async def _upload(self, files: Optional[List[Path]] = None, meta: Optional[Dict[str, Any]] = None):
-        """Upload files to Telegram or Pentaract based on user preference"""
+        """Upload files to Telegram"""
         if files is None:
             files = list(Path(self._tempdir.name).glob("*"))
             # Filter out temporary files (cookies, metadata, etc.)
@@ -549,15 +451,7 @@ class BaseDownloader(ABC):
         if not files:
             raise ValueError("No files to upload")
 
-        # Try Pentaract upload first if applicable
-        pentaract_used = await self._handle_pentaract_upload(files)
-        if pentaract_used:
-            # File was uploaded to Pentaract successfully
-            # Trigger garbage collection after large operations
-            gc.collect()
-            return None  # No Telegram message to return
-
-        # Continue with regular Telegram upload
+        # Upload to Telegram
         # Get metadata if not provided
         if meta is None:
             video_path = files[0]
